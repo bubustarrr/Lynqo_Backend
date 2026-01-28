@@ -52,3 +52,20 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Local Application Settings (Secrets)
+appsettings.Local.json
+appsettings.Development.json
+.env
+
+# Visual Studio / IDE specific files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# HTTPS Certificates (if you ever generate them)
+*.pfx
+*.pem
+*.key
