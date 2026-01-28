@@ -1,0 +1,6 @@
+@Lynqo_Backend_HostAddress = http://localhost:5093
+
+GET {{Lynqo_Backend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
