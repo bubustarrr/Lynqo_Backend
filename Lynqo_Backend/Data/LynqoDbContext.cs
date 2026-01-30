@@ -12,8 +12,14 @@ public class LynqoDbContext : DbContext
     public DbSet<LeaderboardEntry> LeaderboardEntries { get; set; }
     public DbSet<Badge> Badges { get; set; }
     public DbSet<UserBadge> UserBadges { get; set; }
-
     public DbSet<MediaFile> MediaFiles { get; set; }
+    public DbSet<Unit> Units { get; set; }
+    public DbSet<Lesson> Lessons { get; set; }
+    public DbSet<UserLesson> UserLessons { get; set; }
+    public DbSet<LessonContent> LessonContents { get; set; }
+    public DbSet<UserXp> UserXp { get; set; }
+
+
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

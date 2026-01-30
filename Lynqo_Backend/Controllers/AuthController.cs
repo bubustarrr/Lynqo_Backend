@@ -51,7 +51,7 @@ public class AuthController : ControllerBase
             return Unauthorized(new { error = "Invalid credentials." });
 
         var token = JwtHelper.GenerateJwtToken(user,
-            _config["Jwt:Secret"],
+            _config["Jwt:Key"],
             _config["Jwt:Issuer"],
             _config["Jwt:Audience"],
             _config.GetValue<int>("Jwt:ExpiresMinutes", 120));
