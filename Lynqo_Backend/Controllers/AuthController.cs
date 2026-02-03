@@ -44,12 +44,31 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public IActionResult Login([FromBody] UserLoginDTO dto)
     {
+        // 1. Find user
         var user = _context.Users.FirstOrDefault(u =>
             u.Username == dto.UsernameOrEmail || u.Email == dto.UsernameOrEmail);
 
+        // 2. Check password
         if (user == null || !PasswordHasher.VerifyPassword(user.PasswordHash, dto.Password))
             return Unauthorized(new { error = "Invalid credentials." });
 
+        // 3. CHECK BAN STATUS (New)
+        var activeBan = _context.BannedUsers
+            .Where(b => b.UserId == user.Id && (b.BannedUntil == null || b.BannedUntil > DateTime.UtcNow))
+            .OrderByDescending(b => b.CreatedAt)
+            .FirstOrDefault();
+
+        if (activeBan != null)
+        {
+            return Unauthorized(new
+            {
+                error = "Account is banned.",
+                reason = activeBan.Reason,
+                expires = activeBan.BannedUntil
+            });
+        }
+
+        // 4. Generate Token (Your original code)
         var token = JwtHelper.GenerateJwtToken(user,
             _config["Jwt:Key"],
             _config["Jwt:Issuer"],
@@ -62,4 +81,5 @@ public class AuthController : ControllerBase
             user = new { user.Username, user.DisplayName, user.Email }
         });
     }
+
 }

@@ -1,5 +1,6 @@
 using Lynqo_Backend.Data;
 using Lynqo_Backend.Models.Services;
+using LynqoBackend.Models.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -82,6 +83,12 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization(); // Add Authorization service
 
 builder.Services.AddScoped<GamificationService>();
+builder.Services.AddScoped<StoreService>();
+builder.Services.AddScoped<SubscriptionService>();
+builder.Services.AddScoped<SocialService>();
+builder.Services.AddScoped<AiService>();
+builder.Services.AddScoped<AdminService>();
+
 
 var app = builder.Build();
 
