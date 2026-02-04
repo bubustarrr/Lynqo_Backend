@@ -35,7 +35,7 @@ public class LynqoDbContext : DbContext
     public DbSet<BannedUser> BannedUsers { get; set; }
     public DbSet<AdminLog> AdminLogs { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
-
+    public DbSet<ApiToken> ApiTokens { get; set; }
 
 
 
@@ -305,5 +305,10 @@ public class LynqoDbContext : DbContext
 
         // --- LESSONS Mappings ---
         modelBuilder.Entity<Lesson>().Property(l => l.UnitId).HasColumnName("unit_id");
+
+        modelBuilder.Entity<ApiToken>().ToTable("api_tokens");
+        modelBuilder.Entity<ApiToken>().Property(t => t.UserId).HasColumnName("user_id");
+        modelBuilder.Entity<ApiToken>().Property(t => t.CreatedAt).HasColumnName("created_at");
+        modelBuilder.Entity<ApiToken>().Property(t => t.ExpiresAt).HasColumnName("expires_at");
     }
 }
