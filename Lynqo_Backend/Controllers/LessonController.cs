@@ -138,7 +138,7 @@ namespace Lynqo_Backend.Controllers
 
         // POST: api/lessons/5/complete
         [HttpPost("{id}/complete")]
-        [Authorize] // Requires JWT Token
+        [Authorize]
         public async Task<IActionResult> CompleteLesson(int id, [FromBody] LessonCompleteDto dto)
         {
             var userIdClaim = User.FindFirst("id")
@@ -149,62 +149,69 @@ namespace Lynqo_Backend.Controllers
 
             int userId = int.Parse(userIdClaim.Value);
 
-            // 2. Check if lesson exists
+            // 1. Check if lesson exists
             var lesson = await _context.Lessons.FindAsync(id);
             if (lesson == null) return NotFound("Lesson not found");
 
-            // 3. Check if already completed (Optional: decide if you allow replays to give XP)
+            // 2. Retrieve User to update Hearts only
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null) return NotFound("User not found");
+
+            // Update Hearts
+            user.Hearts = dto.HeartsRemaining;
+
+            // 3. Add XP Entry to History Table
+            var xpEntry = new UserXp
+            {
+                UserId = userId,
+                XpAmount = dto.XpEarned,
+                Source = "lesson",
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.UserXp.Add(xpEntry);
+
+            // 4. Update or Create Lesson Progress
             var existingProgress = await _context.UserLessons
                 .FirstOrDefaultAsync(ul => ul.UserId == userId && ul.LessonId == id);
 
             if (existingProgress != null)
             {
-                // Update existing record (improve score)
                 if (dto.Score > existingProgress.BestScore)
                 {
                     existingProgress.BestScore = dto.Score;
                     existingProgress.Stars = Math.Max(existingProgress.Stars, dto.Stars);
-                    // Note: We typically DO NOT give XP again for replays to prevent farming
-                    await _context.SaveChangesAsync();
                 }
-                return Ok(new { Message = "Progress updated", NewTotalXp = -1 }); // -1 indicates no new XP
             }
-
-            // 4. Create new UserLesson record
-            var userLesson = new UserLesson
+            else
             {
-                UserId = userId,
-                LessonId = id,
-                CompletedAt = DateTime.UtcNow,
-                Stars = dto.Stars,
-                XpEarned = dto.XpEarned,
-                BestScore = dto.Score
-            };
-            _context.UserLessons.Add(userLesson);
-
-            // 5. Award XP to User Profile
-            var user = await _context.Users.FindAsync(userId);
-            if (user != null)
-            {
-                // Assuming your User model has 'Xp' column. 
-                // Based on your SQL, you might need to check if 'xp' is in Users table or 'user_xp' table.
-                // Your SQL had 'user_xp' table, but usually User table has a total cache too.
-                // Let's assume you add it to the 'user_xp' table as well:
-
-                var xpEntry = new UserXp
+                var userLesson = new UserLesson
                 {
                     UserId = userId,
-                    XpAmount = dto.XpEarned,
-                    Source = "lesson",
-                    CreatedAt = DateTime.UtcNow
+                    LessonId = id,
+                    CompletedAt = DateTime.UtcNow,
+                    Stars = dto.Stars,
+                    XpEarned = dto.XpEarned,
+                    BestScore = dto.Score
                 };
-                _context.UserXp.Add(xpEntry);
+                _context.UserLessons.Add(userLesson);
             }
 
+            // Save everything
             await _context.SaveChangesAsync();
 
-            return Ok(new { Message = "Lesson completed!", XpAwarded = dto.XpEarned });
-        }
+            // 5. Calculate Total XP dynamically for the response
+            // (This is the slower but "correct" relational way)
+            var currentTotalXp = await _context.UserXp
+                .Where(x => x.UserId == userId)
+                .SumAsync(x => x.XpAmount);
 
+            return Ok(new
+            {
+                Message = "Lesson completed!",
+                XpAwarded = dto.XpEarned,
+                NewTotalXp = currentTotalXp,
+                Hearts = user.Hearts
+            });
+        }
     }
 }

@@ -36,6 +36,7 @@ public class LynqoDbContext : DbContext
     public DbSet<AdminLog> AdminLogs { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
     public DbSet<ApiToken> ApiTokens { get; set; }
+    public DbSet<Course> Courses { get; set; }
 
 
 
