@@ -37,6 +37,8 @@ public class LynqoDbContext : DbContext
     public DbSet<AuditLog> AuditLogs { get; set; }
     public DbSet<ApiToken> ApiTokens { get; set; }
     public DbSet<Course> Courses { get; set; }
+    public DbSet<UserCourse> UserCourses { get; set; }
+
 
 
 
@@ -65,6 +67,7 @@ public class LynqoDbContext : DbContext
         modelBuilder.Entity<BannedUser>().ToTable("banned_users");
         modelBuilder.Entity<AdminLog>().ToTable("admin_logs");
         modelBuilder.Entity<AuditLog>().ToTable("audit_logs");
+
 
 
 
