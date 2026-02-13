@@ -141,26 +141,17 @@ namespace Lynqo_Backend.Controllers
         [Authorize]
         public async Task<IActionResult> CompleteLesson(int id, [FromBody] LessonCompleteDto dto)
         {
-            var userIdClaim = User.FindFirst("id")
-               ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)
-               ?? User.FindFirst("sub");
-
-            if (userIdClaim == null) return Unauthorized("User ID claim missing.");
+            var userIdClaim = User.FindFirst("id") ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+            if (userIdClaim == null) return Unauthorized();
 
             int userId = int.Parse(userIdClaim.Value);
 
-            // 1. Check if lesson exists
-            var lesson = await _context.Lessons.FindAsync(id);
-            if (lesson == null) return NotFound("Lesson not found");
-
-            // 2. Retrieve User to update Hearts only
+            // 1. Update Hearts on User
             var user = await _context.Users.FindAsync(userId);
             if (user == null) return NotFound("User not found");
-
-            // Update Hearts
             user.Hearts = dto.HeartsRemaining;
 
-            // 3. Add XP Entry to History Table (Global History)
+            // 2. Insert XP History Record (This is how we track XP now)
             var xpEntry = new UserXp
             {
                 UserId = userId,
@@ -168,40 +159,12 @@ namespace Lynqo_Backend.Controllers
                 Source = "lesson",
                 CreatedAt = DateTime.UtcNow
             };
-            _context.UserXp.Add(xpEntry);
 
-            // --- NEW: Update Course-Specific XP (UserCourses Table) ---
-            // Find the record for this user + this course (e.g., English->Spanish)
-            // Ensure your Lesson model has 'CourseId' or navigate via Unit->Course
-            // If Lesson doesn't have CourseId directly, retrieve it via Unit
-            int courseId = lesson.CourseId;
-            if (courseId == 0) // Fallback if property isn't populated directly
-            {
-                var unit = await _context.Units.FindAsync(lesson.UnitId);
-                if (unit != null) courseId = unit.CourseId;
-            }
+            // 🔥 IMPORTANT: Ensure this matches your DbContext property name!
+            // It is likely _context.UserXp or _context.UserXps. Check your DbContext!
+            _context.UserXps.Add(xpEntry);
 
-            var userCourse = await _context.UserCourses
-                .FirstOrDefaultAsync(uc => uc.UserId == userId && uc.CourseId == courseId);
-
-            if (userCourse == null)
-            {
-                // First time playing this course? Create the record.
-                userCourse = new UserCourse
-                {
-                    UserId = userId,
-                    CourseId = courseId,
-                    TotalXp = 0,
-                    CreatedAt = DateTime.UtcNow
-                };
-                _context.UserCourses.Add(userCourse);
-            }
-
-            // Add XP to this specific language course
-            userCourse.TotalXp += dto.XpEarned;
-            // -----------------------------------------------------------
-
-            // 4. Update or Create Lesson Progress (Stars/Completion)
+            // 3. Update Lesson Progress
             var existingProgress = await _context.UserLessons
                 .FirstOrDefaultAsync(ul => ul.UserId == userId && ul.LessonId == id);
 
@@ -227,17 +190,22 @@ namespace Lynqo_Backend.Controllers
                 _context.UserLessons.Add(userLesson);
             }
 
-            // Save everything (User updates, XP history, UserCourse XP, Lesson Progress)
             await _context.SaveChangesAsync();
 
-            // 5. Response
+            // 4. Calculate New Total XP to return to frontend
+            // We sum up all records in the UserXp table for this user
+            int currentTotalXp = await _context.UserXps
+                .Where(x => x.UserId == userId)
+                .SumAsync(x => x.XpAmount);
+
             return Ok(new
             {
                 Message = "Lesson completed!",
                 XpAwarded = dto.XpEarned,
-                NewCourseXp = userCourse.TotalXp, // Return the specific language XP
-                Hearts = user.Hearts
+                Hearts = user.Hearts,
+                TotalXp = currentTotalXp // Sending the calculated sum back
             });
         }
+
     }
 }

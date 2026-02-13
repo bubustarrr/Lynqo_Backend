@@ -1,6 +1,6 @@
 ﻿using Lynqo_Backend.Data;
+using Lynqo_Backend.Models; // Ensure this matches your UserXp model namespace
 using Lynqo_Backend.Models.DTOs;
-// using Lynqo_Backend.Models.Services; 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -41,7 +41,8 @@ namespace Lynqo_Backend.Controllers
             // 3. Calculate XP (Separating Course XP vs Global XP)
 
             // A. Global Lifetime XP (Sum of all history)
-            var globalXp = await _context.UserXp
+            // 🔥 This replaces the missing 'TotalXp' column on the User table
+            var globalXp = await _context.UserXp // If red, change to UserXps
                 .Where(x => x.UserId == userId)
                 .SumAsync(x => x.XpAmount);
 
@@ -60,12 +61,12 @@ namespace Lynqo_Backend.Controllers
             }
             else
             {
-                // Fallback: If no course specified, maybe show global XP or 0
+                // Fallback: If no course specified, show global XP
                 currentCourseXp = globalXp;
             }
 
             // 4. Calculate Streak (Global)
-            var activityDates = await _context.UserXp
+            var activityDates = await _context.UserXp // If red, change to UserXps
                 .Where(x => x.UserId == userId)
                 .Select(x => x.CreatedAt.Date)
                 .Distinct()
@@ -85,11 +86,11 @@ namespace Lynqo_Backend.Controllers
                 user.Coins,
                 user.IsPremium,
 
-                // The frontend expects "TotalXp". 
-                // We send the Course Specific XP here so the dashboard shows "French XP"
-                TotalXp = currentCourseXp,
+                // The frontend expects "TotalXp" for the dashboard card.
+                // We send either the Course XP (if courseId sent) or Global XP.
+                TotalXp = currentCourseXp > 0 ? currentCourseXp : globalXp,
 
-                // We also send Global XP just in case you want to show it in a profile page
+                // We also send Global XP explicitly if needed for profile
                 LifetimeXp = globalXp,
 
                 Streak = currentStreak
@@ -156,10 +157,10 @@ namespace Lynqo_Backend.Controllers
                 XpAmount = request.XpAmount,
                 Source = request.Source
             };
-            _context.UserXp.Add(newXp);
+            _context.UserXp.Add(newXp); // If red, change to UserXps
             await _context.SaveChangesAsync();
 
-            var totalXp = await _context.UserXp
+            var totalXp = await _context.UserXp // If red, change to UserXps
                 .Where(xp => xp.UserId == id)
                 .SumAsync(xp => xp.XpAmount);
 
