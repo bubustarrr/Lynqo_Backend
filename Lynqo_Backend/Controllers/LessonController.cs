@@ -32,48 +32,38 @@ namespace Lynqo_Backend.Controllers
             return Ok(lessons);
         }
 
-        // GET: api/lessons/course/1/structure
-        // Get UNITS -> LESSONS hierarchy (The "Dashboard" view)
         [HttpGet("course/{courseId}/structure")]
         public async Task<IActionResult> GetCourseStructure(int courseId)
         {
-            // Try to find the ID in "id", "sub", or the standard NameIdentifier claim
-            var userIdClaim = User.FindFirst("id")
-                           ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)
-                           ?? User.FindFirst("sub");
+            var userIdString = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(userIdString, out int userId)) return Unauthorized();
 
-            if (userIdClaim == null)
-            {
-                return Unauthorized("User ID claim missing. Token contents: " + string.Join(", ", User.Claims.Select(c => c.Type)));
-            }
-
-            int userId = int.Parse(userIdClaim.Value);
-
-            var structure = await _context.Units
-                .Where(u => u.CourseId == courseId)
+            var units = await _context.Units
+                .Where(u => u.CourseId == courseId) // 1. Only French Units
                 .OrderBy(u => u.OrderIndex)
                 .Select(u => new
                 {
                     u.Id,
                     u.Title,
                     u.Description,
-                    Lessons = _context.Lessons
-                        .Where(l => l.UnitId == u.Id)
+                    // 2. DOUBLE FILTER: Only grab lessons that ALSO match the courseId!
+                    Lessons = u.Lessons
+                        .Where(l => l.CourseId == courseId) // <--- THIS BLOCKS THE SPANISH LEAK!
                         .OrderBy(l => l.OrderIndex)
                         .Select(l => new
                         {
                             l.Id,
                             l.Title,
                             l.Type,
-                            l.XpReward,
                             IsCompleted = _context.UserLessons.Any(ul => ul.UserId == userId && ul.LessonId == l.Id)
-                        })
-                        .ToList()
+                        }).ToList()
                 })
                 .ToListAsync();
 
-            return Ok(structure);
+            return Ok(units);
         }
+
+
 
         // GET: api/lessons/5
         // Get a specific lesson AND its contents (questions)

@@ -1,5 +1,5 @@
 ﻿using Lynqo_Backend.Data;
-using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization; // Add [Authorize] if you want it private
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,11 +17,11 @@ namespace Lynqo_Backend.Controllers
         }
 
         // GET: api/leaderboard/global
-        // Returns Top 50 Users by Total XP (All Time)
         [HttpGet("global")]
         public async Task<IActionResult> GetGlobalLeaderboard()
         {
-            var leaderboard = await _context.UserXp
+            // 1. Get Top 50 Users based on Total XP
+            var topUsers = await _context.UserXp // Use UserXps if plural
                 .GroupBy(x => x.UserId)
                 .Select(g => new
                 {
@@ -30,43 +30,54 @@ namespace Lynqo_Backend.Controllers
                 })
                 .OrderByDescending(x => x.TotalXp)
                 .Take(50)
-                .Join(_context.Users,
-                      xp => xp.UserId,
-                      user => user.Id,
-                      (xp, user) => new
-                      {
-                          user.Id,
-                          user.Username,
-                          user.DisplayName,
-                          user.ProfilePicUrl, // If you have avatars
-                          xp.TotalXp
-                      })
+                .ToListAsync(); // Execute SQL here
+
+            // 2. Get User Details for those IDs
+            var userIds = topUsers.Select(u => u.UserId).ToList();
+            var users = await _context.Users
+                .Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.Username, u.DisplayName, u.ProfilePicUrl })
                 .ToListAsync();
 
-            // Add rank numbers (1, 2, 3...) in memory
-            var rankedList = leaderboard.Select((item, index) => new
-            {
-                Rank = index + 1,
-                item.Id,
-                item.Username,
-                item.DisplayName,
-                item.ProfilePicUrl,
-                item.TotalXp
-            });
+            // 3. Combine in Memory (User + XP)
+            var leaderboard = topUsers.Join(users,
+                xp => xp.UserId,
+                user => user.Id,
+                (xp, user) => new
+                {
+                    user.Id,
+                    user.Username,
+                    user.DisplayName,
+                    user.ProfilePicUrl,
+                    xp.TotalXp
+                })
+                .OrderByDescending(x => x.TotalXp) // Ensure order again
+                .Select((item, index) => new
+                {
+                    Rank = index + 1,
+                    item.Id,
+                    Username = item.DisplayName ?? item.Username, // Fallback to username
+                    item.ProfilePicUrl,
+                    Xp = item.TotalXp
+                });
 
-            return Ok(rankedList);
+            return Ok(leaderboard);
         }
 
         // GET: api/leaderboard/weekly
-        // Returns Top 50 Users based on XP earned in the last 7 days
         [HttpGet("weekly")]
         public async Task<IActionResult> GetWeeklyLeaderboard()
         {
-            // Calculate date 7 days ago
-            var sevenDaysAgo = DateTime.UtcNow.AddDays(-7);
+            // Option A: Rolling 7 Days (Last 7 days from right now)
+            var startDate = DateTime.UtcNow.AddDays(-7);
 
-            var leaderboard = await _context.UserXp
-                .Where(x => x.CreatedAt >= sevenDaysAgo) // Filter for recent XP only
+            // Option B: Reset on Monday (Uncomment if you want this)
+            // var diff = (7 + (DateTime.UtcNow.DayOfWeek - DayOfWeek.Monday)) % 7;
+            // var startDate = DateTime.UtcNow.Date.AddDays(-1 * diff); 
+
+            // 1. Get Weekly XP Sums
+            var weeklyStats = await _context.UserXp // Use UserXps if plural
+                .Where(x => x.CreatedAt >= startDate)
                 .GroupBy(x => x.UserId)
                 .Select(g => new
                 {
@@ -75,30 +86,38 @@ namespace Lynqo_Backend.Controllers
                 })
                 .OrderByDescending(x => x.WeeklyXp)
                 .Take(50)
-                .Join(_context.Users,
-                      xp => xp.UserId,
-                      user => user.Id,
-                      (xp, user) => new
-                      {
-                          user.Id,
-                          user.Username,
-                          user.DisplayName,
-                          user.ProfilePicUrl,
-                          xp.WeeklyXp
-                      })
+                .ToListAsync(); // Execute SQL
+
+            // 2. Get User Details
+            var userIds = weeklyStats.Select(u => u.UserId).ToList();
+            var users = await _context.Users
+                .Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.Username, u.DisplayName, u.ProfilePicUrl })
                 .ToListAsync();
 
-            var rankedList = leaderboard.Select((item, index) => new
-            {
-                Rank = index + 1,
-                item.Id,
-                item.Username,
-                item.DisplayName,
-                item.ProfilePicUrl,
-                TotalXp = item.WeeklyXp
-            });
+            // 3. Combine
+            var leaderboard = weeklyStats.Join(users,
+                xp => xp.UserId,
+                user => user.Id,
+                (xp, user) => new
+                {
+                    user.Id,
+                    user.Username,
+                    user.DisplayName,
+                    user.ProfilePicUrl,
+                    xp.WeeklyXp
+                })
+                .OrderByDescending(x => x.WeeklyXp)
+                .Select((item, index) => new
+                {
+                    Rank = index + 1,
+                    item.Id,
+                    Username = item.DisplayName ?? item.Username,
+                    item.ProfilePicUrl,
+                    Xp = item.WeeklyXp
+                });
 
-            return Ok(rankedList);
+            return Ok(leaderboard);
         }
     }
 }
