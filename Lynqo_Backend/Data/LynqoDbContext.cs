@@ -168,6 +168,28 @@ public class LynqoDbContext : DbContext
             .WithMany()
             .HasForeignKey(r => r.ResolvedBy)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // --- SETTINGS Mappings ---
+        modelBuilder.Entity<Setting>().ToTable("settings");
+
+        modelBuilder.Entity<Setting>()
+            .Property(s => s.UserId).HasColumnName("user_id");
+
+        modelBuilder.Entity<Setting>()
+            .Property(s => s.DarkMode).HasColumnName("dark_mode");
+
+        modelBuilder.Entity<Setting>()
+            .Property(s => s.SoundEnabled).HasColumnName("sound_enabled");
+
+        modelBuilder.Entity<Setting>()
+            .Property(s => s.DailyGoalMinutes).HasColumnName("daily_goal_minutes");
+
+        modelBuilder.Entity<Setting>()
+            .Property(s => s.UiLanguage).HasColumnName("ui_language");
+
+        modelBuilder.Entity<Setting>()
+            .Property(s => s.NotificationsEnabled).HasColumnName("notifications_enabled");
+
         // --- 1. QUESTS Mappings ---
         modelBuilder.Entity<Quest>()
             .Property(q => q.RewardXp).HasColumnName("reward_xp");
