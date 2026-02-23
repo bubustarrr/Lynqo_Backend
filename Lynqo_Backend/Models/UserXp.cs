@@ -13,11 +13,6 @@ namespace Lynqo_Backend.Models
         [Column("user_id")]
         public int UserId { get; set; }
 
-        // --- ADD THIS PROPERTY ---
-        [ForeignKey("UserId")]
-        public User User { get; set; }
-        // -------------------------
-
         [Column("xp_amount")]
         public int XpAmount { get; set; }
 
@@ -26,5 +21,7 @@ namespace Lynqo_Backend.Models
 
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public User User { get; set; } = null!;
+
     }
 }

@@ -1,8 +1,7 @@
 using Lynqo_Backend.Data;
-using LynqoBackend.Models;
+using Lynqo_Backend.Models;
 using LynqoBackend.Models.DTOs;
 using Microsoft.EntityFrameworkCore;
-
 
 namespace LynqoBackend.Models.Services
 {
@@ -29,6 +28,7 @@ namespace LynqoBackend.Models.Services
                 var other = f.SenderId == userId ? f.Receiver : f.Sender;
                 return new FriendDTO
                 {
+                    FriendshipId = f.Id,
                     UserId = other.Id,
                     Username = other.Username,
                     DisplayName = other.DisplayName,
@@ -40,24 +40,20 @@ namespace LynqoBackend.Models.Services
 
         public async Task<List<FriendDTO>> GetRequestsAsync(int userId)
         {
+            // ONLY get requests where WE are the receiver (people waiting for us to respond)
             var requests = await _context.Friendships
-                .Where(f => f.Status == "pending" &&
-                           (f.SenderId == userId || f.ReceiverId == userId))
+                .Where(f => f.Status == "pending" && f.ReceiverId == userId)
                 .Include(f => f.Sender)
-                .Include(f => f.Receiver)
                 .ToListAsync();
 
-            return requests.Select(f =>
+            return requests.Select(f => new FriendDTO
             {
-                var other = f.SenderId == userId ? f.Receiver : f.Sender;
-                return new FriendDTO
-                {
-                    UserId = other.Id,
-                    Username = other.Username,
-                    DisplayName = other.DisplayName,
-                    Status = f.Status,
-                    IsSender = f.SenderId == userId
-                };
+                FriendshipId = f.Id,
+                UserId = f.SenderId,
+                Username = f.Sender.Username,
+                DisplayName = f.Sender.DisplayName,
+                Status = f.Status,
+                IsSender = false
             }).ToList();
         }
 
@@ -87,13 +83,24 @@ namespace LynqoBackend.Models.Services
 
         public async Task RespondRequestAsync(int userId, int requestId, bool accept)
         {
+            // Find the exact Friendship DB row
             var friendship = await _context.Friendships.FindAsync(requestId)
                              ?? throw new InvalidOperationException("Request not found.");
 
+            // Ensure I am the one receiving this request
             if (friendship.ReceiverId != userId)
                 throw new InvalidOperationException("Not allowed to respond to this request.");
 
-            friendship.Status = accept ? "accepted" : "declined";
+            if (accept)
+            {
+                friendship.Status = "accepted";
+            }
+            else
+            {
+                // If declined, usually we just delete the request entirely so they can try again later
+                _context.Friendships.Remove(friendship);
+            }
+
             await _context.SaveChangesAsync();
         }
     }

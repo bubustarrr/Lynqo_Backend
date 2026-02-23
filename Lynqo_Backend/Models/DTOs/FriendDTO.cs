@@ -1,9 +1,9 @@
 namespace LynqoBackend.Models.DTOs
 {
-
     public class FriendDTO
     {
-        public int UserId { get; set; }
+        public int FriendshipId { get; set; }  // The DB Row ID
+        public int UserId { get; set; }        // The other user's ID
         public string Username { get; set; } = "";
         public string DisplayName { get; set; } = "";
         public string Status { get; set; } = ""; // "pending" | "accepted" | "declined"
@@ -17,7 +17,7 @@ namespace LynqoBackend.Models.DTOs
 
     public class FriendRespondDTO
     {
-        public int RequestId { get; set; }
-        public bool Accept { get; set; }
+        public int RequestId { get; set; }     // Maps directly to FriendshipId
+        public bool Accept { get; set; }       // True to accept, false to decline
     }
 }

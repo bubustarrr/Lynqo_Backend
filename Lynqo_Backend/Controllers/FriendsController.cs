@@ -55,6 +55,7 @@ namespace LynqoBackend.Controllers
         public async Task<IActionResult> Respond([FromBody] FriendRespondDTO dto)
         {
             var userId = GetUserId();
+            // This maps requestId cleanly!
             await _social.RespondRequestAsync(userId, dto.RequestId, dto.Accept);
             return Ok(new { message = dto.Accept ? "Friend request accepted." : "Friend request declined." });
         }

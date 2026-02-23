@@ -1,4 +1,6 @@
 // Subscription.cs
+using Lynqo_Backend.Models;
+
 namespace LynqoBackend.Models
 {
     public class Subscription

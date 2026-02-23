@@ -1,3 +1,5 @@
+using Lynqo_Backend.Models;
+
 public class AuditLog
 {
     public int Id { get; set; }

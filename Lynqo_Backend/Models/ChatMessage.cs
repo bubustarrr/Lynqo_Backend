@@ -1,4 +1,6 @@
 // ChatMessage.cs
+using Lynqo_Backend.Models;
+
 namespace LynqoBackend.Models
 {
     public class ChatMessage
