@@ -1,13 +1,14 @@
-﻿using System;
+﻿using Lynqo_Backend.Data;
+using Lynqo_Backend.Models;
+using Lynqo_Backend.Models.DTOs;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using System.Collections.Generic;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.EntityFrameworkCore;
-using Lynqo_Backend.Data;
-using Lynqo_Backend.Models;
 
 namespace Lynqo_Backend.Controllers
 {
@@ -134,5 +135,55 @@ namespace Lynqo_Backend.Controllers
                 Streak = currentStreak
             };
         }
+
+            [HttpPut("me")]
+            [Authorize]
+            public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateProfileDto dto)
+            {
+                // 1. Get user id from JWT
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                               ?? User.FindFirst("id")?.Value
+                               ?? User.FindFirst("sub")?.Value;
+
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+                    return Unauthorized();
+
+                // 2. Load user
+                var user = await _context.Users.FindAsync(userId);
+                if (user == null)
+                    return NotFound();
+
+                // 3. Update simple fields if provided
+                if (!string.IsNullOrWhiteSpace(dto.Username))
+                    user.Username = dto.Username.Trim();
+
+                if (!string.IsNullOrWhiteSpace(dto.DisplayName))
+                    user.DisplayName = dto.DisplayName.Trim();
+
+                if (!string.IsNullOrWhiteSpace(dto.ProfilePicUrl))
+                    user.ProfilePicUrl = dto.ProfilePicUrl.Trim();
+
+                // 4. Update password if provided
+                if (!string.IsNullOrEmpty(dto.Password))
+                {
+                    // Use the SAME hashing you use in your login/register code:
+                    // user.PasswordHash = YourPasswordHasher.Hash(dto.Password);
+
+                    // temporary unsafe version (only while testing, not for production):
+                    // user.PasswordHash = dto.Password;
+                }
+
+                // 5. Save changes
+                await _context.SaveChangesAsync();
+
+                // 6. Option A: return nothing (204)
+                // return NoContent();
+
+                // 6. Option B: return updated profile in same shape as GET /me
+                var profileData = await BuildProfileDataAsync(user);
+                return Ok(profileData);
+            }
+
+        }
     }
-}
+
