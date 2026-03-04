@@ -21,10 +21,7 @@ builder.Services.AddSwaggerGen(c =>
     // Enable the "Authorize" button in Swagger UI
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description =
-            "JWT Authorization header using the Bearer scheme.\r\n\r\n" +
-            "Enter 'Bearer' [space] and then your token in the text input below.\r\n\r\n" +
-            "Example: \"Bearer 12345abcdef\"",
+        Description = "JWT Authorization header using the Bearer scheme. \r\n\r\n Enter 'Bearer' [space] and then your token in the text input below.\r\n\r\nExample: \"Bearer 12345abcdef\"",
         Name = "Authorization",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.ApiKey,
@@ -50,24 +47,19 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// --- Configuration values (from appsettings + User Secrets + env vars) ---
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found. Set it via appsettings / User Secrets / environment variables.");
-
-var jwtKey = builder.Configuration["Jwt:Key"]
-    ?? throw new InvalidOperationException("JWT key not found. Set configuration key 'Jwt:Key' via appsettings / User Secrets / environment variables.");
-
-var jwtKeyBytes = Encoding.UTF8.GetBytes(jwtKey);
-
 // --- Database Context ---
 builder.Services.AddDbContext<LynqoDbContext>(options =>
     options.UseMySql(
-        connectionString,
-        ServerVersion.AutoDetect(connectionString)
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        ServerVersion.AutoDetect(builder.Configuration.GetConnectionString("DefaultConnection"))
     )
 );
 
 // --- JWT Authentication Configuration ---
+// Make sure "Jwt:Key" exists in your appsettings.json and is >32 chars long
+var jwtKey = builder.Configuration["Jwt:Key"];
+var key = Encoding.UTF8.GetBytes(jwtKey);
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -75,29 +67,28 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    // Only relax HTTPS in Development
-    options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+    options.RequireHttpsMetadata = false; // Set to true for production
     options.SaveToken = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(jwtKeyBytes),
-        ValidateIssuer = false,   // set true + configure Issuer in production if needed
-        ValidateAudience = false, // set true + configure Audience in production if needed
+        IssuerSigningKey = new SymmetricSecurityKey(key),
+        ValidateIssuer = false,  // Simplified for dev; set true in prod
+        ValidateAudience = false, // Simplified for dev; set true in prod
         ValidateLifetime = true,
         ClockSkew = TimeSpan.Zero
     };
 });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(); // Add Authorization service
 
-// --- Application Services ---
 builder.Services.AddScoped<GamificationService>();
 builder.Services.AddScoped<StoreService>();
 builder.Services.AddScoped<SubscriptionService>();
 builder.Services.AddScoped<SocialService>();
 builder.Services.AddScoped<AiService>();
 builder.Services.AddScoped<AdminService>();
+
 
 var app = builder.Build();
 
@@ -108,7 +99,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// You may want to tighten this in production to only allow your frontend origin.
 app.UseCors(x => x
     .AllowAnyOrigin()
     .AllowAnyMethod()
