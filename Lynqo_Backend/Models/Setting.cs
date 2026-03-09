@@ -19,8 +19,6 @@ namespace Lynqo_Backend.Models
         [Column("sound_enabled")]
         public bool SoundEnabled { get; set; }
 
-        [Column("daily_goal_minutes")]
-        public int DailyGoalMinutes { get; set; }
 
         [Column("ui_language")]
         public string UiLanguage { get; set; }

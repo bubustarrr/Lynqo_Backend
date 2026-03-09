@@ -4,9 +4,7 @@
     {
         public bool DarkMode { get; set; }
         public bool SoundEnabled { get; set; }
-        public int DailyGoalMinutes { get; set; }
-        public string UiLanguage { get; set; }
+        public string UiLanguage { get; set; } = "en";
         public bool NotificationsEnabled { get; set; }
     }
-
 }

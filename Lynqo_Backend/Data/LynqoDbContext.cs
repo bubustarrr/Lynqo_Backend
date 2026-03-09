@@ -182,9 +182,6 @@ public class LynqoDbContext : DbContext
             .Property(s => s.SoundEnabled).HasColumnName("sound_enabled");
 
         modelBuilder.Entity<Setting>()
-            .Property(s => s.DailyGoalMinutes).HasColumnName("daily_goal_minutes");
-
-        modelBuilder.Entity<Setting>()
             .Property(s => s.UiLanguage).HasColumnName("ui_language");
 
         modelBuilder.Entity<Setting>()
