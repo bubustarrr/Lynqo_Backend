@@ -1,5 +1,5 @@
 ﻿using Lynqo_Backend.Data;
-using Lynqo_Backend.Models; // Ensure this matches your UserXp model namespace
+using Lynqo_Backend.Models;
 using Lynqo_Backend.Models.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -19,54 +19,43 @@ namespace Lynqo_Backend.Controllers
             _context = context;
         }
 
-        // --- NEW: The "Me" Endpoint for the Home Screen ---
         // GET: api/user/me?courseId=1
         [HttpGet("me")]
         [Authorize]
         public async Task<IActionResult> GetMyProfile([FromQuery] int? courseId)
         {
-            // 1. Get User ID safely
-            var userIdClaim = User.FindFirst("sub")
-                           ?? User.FindFirst(ClaimTypes.NameIdentifier)
-                           ?? User.FindFirst("id");
+            if (!TryGetUserId(out int userId))
+                return Unauthorized();
 
-            if (userIdClaim == null) return Unauthorized();
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                return NotFound();
 
-            int userId = int.Parse(userIdClaim.Value);
+            // Optional: keep this only if HeartService exists in your project
+            HeartService.ApplyHeartRefill(user);
+            await _context.SaveChangesAsync();
 
-            // 2. Fetch User Details
-            var user = await _context.Users.FindAsync(userId);
-            if (user == null) return NotFound();
-
-            // 3. Calculate XP (Separating Course XP vs Global XP)
-
-            // A. Global Lifetime XP (Sum of all history)
-            // 🔥 This replaces the missing 'TotalXp' column on the User table
-            var globalXp = await _context.UserXp // If red, change to UserXps
+            // Global lifetime XP from userxp table
+            int globalXp = await _context.UserXps
                 .Where(x => x.UserId == userId)
-                .SumAsync(x => x.XpAmount);
+                .SumAsync(x => (int?)x.XpAmount) ?? 0;
 
-            // B. Active Course XP (from UserCourses table)
-            int currentCourseXp = 0;
+            // Course XP from userlessons + lessons
+            int currentCourseXp = globalXp;
             if (courseId.HasValue)
             {
-                // If a course is selected, get XP for THAT course specifically
-                var userCourse = await _context.UserCourses
-                    .FirstOrDefaultAsync(uc => uc.UserId == userId && uc.CourseId == courseId.Value);
-
-                if (userCourse != null)
-                {
-                    currentCourseXp = userCourse.TotalXp;
-                }
-            }
-            else
-            {
-                // Fallback: If no course specified, show global XP
-                currentCourseXp = globalXp;
+                currentCourseXp = await _context.UserLessons
+                    .Where(ul => ul.UserId == userId)
+                    .Join(
+                        _context.Lessons.Where(l => l.CourseId == courseId.Value),
+                        ul => ul.LessonId,
+                        l => l.Id,
+                        (ul, l) => (int?)ul.XpEarned
+                    )
+                    .SumAsync() ?? 0;
             }
 
-            // 4. Calculate Streak (Global)
-            var activityDates = await _context.UserXp // If red, change to UserXps
+            var activityDates = await _context.UserXps
                 .Where(x => x.UserId == userId)
                 .Select(x => x.CreatedAt.Date)
                 .Distinct()
@@ -75,7 +64,6 @@ namespace Lynqo_Backend.Controllers
 
             int currentStreak = CalculateStreak(activityDates);
 
-            // 5. Return the combined data
             return Ok(new
             {
                 user.Id,
@@ -85,56 +73,43 @@ namespace Lynqo_Backend.Controllers
                 user.Hearts,
                 user.Coins,
                 user.IsPremium,
-
-                // The frontend expects "TotalXp" for the dashboard card.
-                // We send either the Course XP (if courseId sent) or Global XP.
-                TotalXp = currentCourseXp > 0 ? currentCourseXp : globalXp,
-
-                // We also send Global XP explicitly if needed for profile
+                TotalXp = currentCourseXp,
                 LifetimeXp = globalXp,
-
                 Streak = currentStreak
             });
         }
 
-        // --- Helper for Streak Calculation ---
-        private int CalculateStreak(List<DateTime> dates)
+        // GET: api/user/me/resources
+        [HttpGet("me/resources")]
+        [Authorize]
+        public async Task<IActionResult> GetMyResources()
         {
-            if (dates.Count == 0) return 0;
+            if (!TryGetUserId(out int userId))
+                return Unauthorized();
 
-            var today = DateTime.UtcNow.Date;
-            var yesterday = today.AddDays(-1);
-            int streak = 0;
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                return NotFound();
 
-            if (dates[0] != today && dates[0] != yesterday)
+            HeartService.ApplyHeartRefill(user);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
             {
-                return 0;
-            }
-
-            var checkDate = dates[0] == today ? today : yesterday;
-
-            foreach (var date in dates)
-            {
-                if (date == checkDate)
-                {
-                    streak++;
-                    checkDate = checkDate.AddDays(-1);
-                }
-                else
-                {
-                    break;
-                }
-            }
-            return streak;
+                user.Id,
+                user.Username,
+                hearts = user.Hearts,
+                coins = user.Coins
+            });
         }
-
-        // --- EXISTING ENDPOINTS ---
 
         [HttpGet("{username}")]
         public async Task<IActionResult> GetUser(string username)
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
-            if (user == null) return NotFound();
+            if (user == null)
+                return NotFound();
+
             return Ok(new
             {
                 user.Username,
@@ -151,18 +126,24 @@ namespace Lynqo_Backend.Controllers
         [HttpPost("{id}/xp")]
         public async Task<IActionResult> AddXp(int id, [FromBody] AddXpRequest request)
         {
-            var newXp = new Lynqo_Backend.Models.UserXp
+            var userExists = await _context.Users.AnyAsync(u => u.Id == id);
+            if (!userExists)
+                return NotFound(new { message = "User not found." });
+
+            var newXp = new UserXp
             {
                 UserId = id,
                 XpAmount = request.XpAmount,
-                Source = request.Source
+                Source = request.Source,
+                CreatedAt = DateTime.UtcNow
             };
-            _context.UserXp.Add(newXp); // If red, change to UserXps
+
+            _context.UserXps.Add(newXp);
             await _context.SaveChangesAsync();
 
-            var totalXp = await _context.UserXp // If red, change to UserXps
+            int totalXp = await _context.UserXps
                 .Where(xp => xp.UserId == id)
-                .SumAsync(xp => xp.XpAmount);
+                .SumAsync(xp => (int?)xp.XpAmount) ?? 0;
 
             return Ok(new { totalXp, message = "XP added!" });
         }
@@ -170,11 +151,11 @@ namespace Lynqo_Backend.Controllers
         [HttpGet("{id}/xp")]
         public async Task<IActionResult> GetUserXp(int id)
         {
-            var totalXp = await _context.UserXp
+            int totalXp = await _context.UserXps
                 .Where(xp => xp.UserId == id)
-                .SumAsync(xp => xp.XpAmount);
+                .SumAsync(xp => (int?)xp.XpAmount) ?? 0;
 
-            var recent = await _context.UserXp
+            var recent = await _context.UserXps
                 .Where(xp => xp.UserId == id)
                 .OrderByDescending(xp => xp.CreatedAt)
                 .Take(10)
@@ -186,7 +167,75 @@ namespace Lynqo_Backend.Controllers
                 })
                 .ToListAsync();
 
-            return Ok(new UserXpDTO { TotalXp = totalXp, RecentXp = recent });
+            return Ok(new UserXpDTO
+            {
+                TotalXp = totalXp,
+                RecentXp = recent
+            });
+        }
+
+        [HttpPost("spend-heart")]
+        [Authorize]
+        public async Task<IActionResult> SpendHeart()
+        {
+            if (!TryGetUserId(out int userId))
+                return Unauthorized();
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                return NotFound();
+
+            var ok = HeartService.TrySpendHeart(user);
+            if (!ok)
+                return BadRequest(new { message = "No hearts available." });
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                hearts = user.Hearts
+            });
+        }
+
+        private bool TryGetUserId(out int userId)
+        {
+            userId = 0;
+
+            var userIdClaim = User.FindFirst("sub")
+                             ?? User.FindFirst(ClaimTypes.NameIdentifier)
+                             ?? User.FindFirst("id");
+
+            return userIdClaim != null && int.TryParse(userIdClaim.Value, out userId);
+        }
+
+        private int CalculateStreak(List<DateTime> dates)
+        {
+            if (dates == null || dates.Count == 0)
+                return 0;
+
+            var today = DateTime.UtcNow.Date;
+            var yesterday = today.AddDays(-1);
+
+            if (dates[0] != today && dates[0] != yesterday)
+                return 0;
+
+            int streak = 0;
+            var checkDate = dates[0] == today ? today : yesterday;
+
+            foreach (var date in dates)
+            {
+                if (date == checkDate)
+                {
+                    streak++;
+                    checkDate = checkDate.AddDays(-1);
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            return streak;
         }
 
         public record AddXpRequest(int XpAmount, string Source = "lesson");

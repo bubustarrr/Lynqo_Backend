@@ -42,6 +42,9 @@ namespace Lynqo_Backend.Models
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
+        [Column("last_heart_refill_at")]
+        public DateTime? LastHeartRefillAt { get; set; }
+
         // Navigation properties (needed by DbContext)
         public ICollection<UserXp> XpHistory { get; set; } = new List<UserXp>();
         public ICollection<UserLesson> UserLessons { get; set; } = new List<UserLesson>();
