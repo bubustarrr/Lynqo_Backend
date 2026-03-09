@@ -42,7 +42,10 @@ namespace LynqoBackend.Controllers
         public async Task<IActionResult> Start([FromBody] StartSubscriptionRequest dto)
         {
             var userId = GetUserId();
-            var sub = await _subscriptionService.StartAsync(userId, dto.PlanName, dto.QuantityMonths);
+
+            // Itt adjuk át az AutoRenew értéket is a DTO-ból a Service-nek!
+            var sub = await _subscriptionService.StartAsync(userId, dto.PlanName, dto.QuantityMonths, dto.AutoRenew);
+
             return Ok(sub);
         }
 

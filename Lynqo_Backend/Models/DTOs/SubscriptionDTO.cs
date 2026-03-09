@@ -14,5 +14,8 @@ namespace LynqoBackend.Models.DTOs
     {
         public string PlanName { get; set; } = "Premium";
         public int QuantityMonths { get; set; } = 1;
+
+        // Ezt a sort adtuk hozzá, hogy a React át tudja küldeni a kapcsoló állapotát!
+        public bool AutoRenew { get; set; } = true;
     }
 }
