@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Lynqo_Backend.Data;
+using Lynqo_Backend.Models;
 using LynqoBackend.Models;
 using LynqoBackend.Models.DTOs;
 using Microsoft.AspNetCore.Authorization;

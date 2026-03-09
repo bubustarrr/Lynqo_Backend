@@ -88,6 +88,8 @@ builder.Services.AddScoped<SubscriptionService>();
 builder.Services.AddScoped<SocialService>();
 builder.Services.AddScoped<AiService>();
 builder.Services.AddScoped<AdminService>();
+builder.Services.AddScoped<ChatService>();
+
 
 
 var app = builder.Build();

@@ -1,14 +1,10 @@
-﻿using Lynqo_Backend.Data;
+﻿using System.Security.Claims;
+using Lynqo_Backend.Data;
 using Lynqo_Backend.Models;
 using Lynqo_Backend.Models.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Security.Claims;
-using System.Threading.Tasks;
 
 namespace Lynqo_Backend.Controllers
 {
@@ -17,110 +13,273 @@ namespace Lynqo_Backend.Controllers
     public class ProfileController : ControllerBase
     {
         private readonly LynqoDbContext _context;
+        private readonly IWebHostEnvironment _environment;
 
-        public ProfileController(LynqoDbContext context)
+        public ProfileController(LynqoDbContext context, IWebHostEnvironment environment)
         {
             _context = context;
+            _environment = environment;
         }
 
-        // ==========================================
-        // 1. GET: api/Profile/me  (My own profile)
-        // ==========================================
         [HttpGet("me")]
-        [Authorize] // Requires you to be logged in
+        [Authorize]
         public async Task<IActionResult> GetMyProfile()
         {
             try
             {
-                // Get User ID from JWT Token
-                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                               ?? User.FindFirst("id")?.Value
-                               ?? User.FindFirst("sub")?.Value;
-
-                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
-                {
+                var userId = GetCurrentUserId();
+                if (userId == null)
                     return Unauthorized(new { message = "Invalid token." });
-                }
 
-                // Fetch User
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
-                if (user == null) return NotFound(new { message = "User not found." });
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId.Value);
+                if (user == null)
+                    return NotFound(new { message = "User not found." });
 
-                // Build Safe Response
                 var profileData = await BuildProfileDataAsync(user);
                 return Ok(profileData);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Crash in /me", details = ex.InnerException?.Message ?? ex.Message });
+                return StatusCode(500, new
+                {
+                    error = "Crash in /me",
+                    details = ex.InnerException?.Message ?? ex.Message
+                });
             }
         }
 
-        // ==========================================
-        // 2. GET: api/Profile/{username}  (Other profiles)
-        // ==========================================
         [HttpGet("{username}")]
         public async Task<IActionResult> GetUserProfile(string username)
         {
             try
             {
-                // Fetch User by username
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == username.ToLower());
-                if (user == null) return NotFound(new { message = $"User '{username}' not found." });
+                var normalizedUsername = username.Trim().ToLower();
 
-                // Build Safe Response
+                var user = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Username.ToLower() == normalizedUsername);
+
+                if (user == null)
+                    return NotFound(new { message = $"User '{username}' not found." });
+
                 var profileData = await BuildProfileDataAsync(user);
                 return Ok(profileData);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = $"Crash in /{username}", details = ex.InnerException?.Message ?? ex.Message });
+                return StatusCode(500, new
+                {
+                    error = $"Crash in /{username}",
+                    details = ex.InnerException?.Message ?? ex.Message
+                });
             }
         }
 
-        // ==========================================
-        // SAFE DATA BUILDER
-        // ==========================================
+        [HttpPut("me")]
+        [Authorize]
+        public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateProfileDto dto)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (userId == null)
+                    return Unauthorized(new { message = "Invalid token." });
+
+                var user = await _context.Users.FindAsync(userId.Value);
+                if (user == null)
+                    return NotFound(new { message = "User not found." });
+
+                if (!string.IsNullOrWhiteSpace(dto.Username))
+                    user.Username = dto.Username.Trim();
+
+                if (!string.IsNullOrWhiteSpace(dto.DisplayName))
+                    user.DisplayName = dto.DisplayName.Trim();
+
+                if (!string.IsNullOrWhiteSpace(dto.Email))
+                    user.Email = dto.Email.Trim();
+
+                if (!string.IsNullOrWhiteSpace(dto.Password))
+                {
+                    // TODO: Replace with your real password hasher
+                    // user.PasswordHash = YourPasswordHasher.Hash(dto.Password);
+                }
+
+                await _context.SaveChangesAsync();
+
+                var profileData = await BuildProfileDataAsync(user);
+                return Ok(profileData);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    error = "Crash in PUT /me",
+                    details = ex.InnerException?.Message ?? ex.Message
+                });
+            }
+        }
+
+        [HttpPost("me/avatar")]
+        [Authorize]
+        [Consumes("multipart/form-data")]
+        [RequestSizeLimit(10_000_000)]
+        public async Task<IActionResult> UploadMyAvatar(IFormFile file)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (userId == null)
+                    return Unauthorized(new { message = "Invalid token." });
+
+                if (file == null || file.Length == 0)
+                    return BadRequest(new { message = "No file uploaded." });
+
+                var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
+                var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+
+                if (!allowedExtensions.Contains(extension))
+                    return BadRequest(new { message = "Only image files are allowed." });
+
+                if (file.Length > 10_000_000)
+                    return BadRequest(new { message = "File is too large." });
+
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId.Value);
+                if (user == null)
+                    return NotFound(new { message = "User not found." });
+
+                var webRoot = _environment.WebRootPath ??
+                              Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+
+                var uploadFolder = Path.Combine(
+                    webRoot,
+                    "media",
+                    "images",
+                    "profile_pictures"
+                );
+
+                if (!Directory.Exists(uploadFolder))
+                    Directory.CreateDirectory(uploadFolder);
+
+                if (!string.IsNullOrWhiteSpace(user.ProfilePicUrl) &&
+                    user.ProfilePicUrl.StartsWith("/media/images/profile_pictures/"))
+                {
+                    try
+                    {
+                        var oldRelativePath = user.ProfilePicUrl
+                            .TrimStart('/')
+                            .Replace('/', Path.DirectorySeparatorChar);
+
+                        var oldFullPath = Path.Combine(webRoot, oldRelativePath);
+
+                        if (System.IO.File.Exists(oldFullPath))
+                            System.IO.File.Delete(oldFullPath);
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                var randomFileName = $"{Guid.NewGuid():N}{extension}";
+                var fullFilePath = Path.Combine(uploadFolder, randomFileName);
+
+                await using (var stream = new FileStream(fullFilePath, FileMode.Create))
+                {
+                    await file.CopyToAsync(stream);
+                }
+
+                var publicUrl = $"/media/images/profile_pictures/{randomFileName}";
+                user.ProfilePicUrl = publicUrl;
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    message = "Profile picture uploaded successfully.",
+                    avatarUrl = publicUrl
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    error = "Crash in /me/avatar",
+                    details = ex.InnerException?.Message ?? ex.Message
+                });
+            }
+        }
+
+        private int? GetCurrentUserId()
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                           ?? User.FindFirst("id")?.Value
+                           ?? User.FindFirst("sub")?.Value;
+
+            if (string.IsNullOrWhiteSpace(userIdClaim))
+                return null;
+
+            if (!int.TryParse(userIdClaim, out var userId))
+                return null;
+
+            return userId;
+        }
+
         private async Task<object> BuildProfileDataAsync(User user)
         {
             int totalXp = 0;
             int currentStreak = 0;
 
-            // 1. Safely fetch XP (If this table mapping is broken, XP just becomes 0)
             try
             {
-                totalXp = await _context.UserXps.Where(x => x.UserId == user.Id).SumAsync(x => x.XpAmount);
+                totalXp = await _context.UserXps
+                    .Where(x => x.UserId == user.Id)
+                    .Select(x => x.XpAmount)
+                    .DefaultIfEmpty(0)
+                    .SumAsync();
             }
-            catch { /* DB issue with UserXps, ignoring */ }
+            catch
+            {
+            }
 
-            // 2. Safely fetch Streak
             try
             {
-                var dates = await _context.UserLessons
+                var completedDates = await _context.UserLessons
                     .Where(ul => ul.UserId == user.Id)
-                    .Select(ul => ul.CompletedAt.Date)
+                    .Select(ul => ul.CompletedAt)
+                    .ToListAsync();
+
+                var dates = completedDates
+                    .Select(d => d.Date)
                     .Distinct()
                     .OrderByDescending(d => d)
-                    .ToListAsync();
+                    .ToList();
 
                 if (dates.Any())
                 {
                     var today = DateTime.UtcNow.Date;
                     var last = dates.First();
+
                     if (last >= today.AddDays(-1))
                     {
-                        DateTime expected = last;
+                        var expected = last;
+
                         foreach (var d in dates)
                         {
-                            if (d == expected) { currentStreak++; expected = expected.AddDays(-1); }
-                            else break;
+                            if (d == expected)
+                            {
+                                currentStreak++;
+                                expected = expected.AddDays(-1);
+                            }
+                            else
+                            {
+                                break;
+                            }
                         }
                     }
                 }
             }
-            catch { /* DB issue with UserLessons, ignoring */ }
+            catch
+            {
+            }
 
-            // Return the cleanly mapped object!
             return new
             {
                 Username = user.Username,
@@ -135,55 +294,5 @@ namespace Lynqo_Backend.Controllers
                 Streak = currentStreak
             };
         }
-
-            [HttpPut("me")]
-            [Authorize]
-            public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateProfileDto dto)
-            {
-                // 1. Get user id from JWT
-                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                               ?? User.FindFirst("id")?.Value
-                               ?? User.FindFirst("sub")?.Value;
-
-                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
-                    return Unauthorized();
-
-                // 2. Load user
-                var user = await _context.Users.FindAsync(userId);
-                if (user == null)
-                    return NotFound();
-
-                // 3. Update simple fields if provided
-                if (!string.IsNullOrWhiteSpace(dto.Username))
-                    user.Username = dto.Username.Trim();
-
-                if (!string.IsNullOrWhiteSpace(dto.DisplayName))
-                    user.DisplayName = dto.DisplayName.Trim();
-
-                if (!string.IsNullOrWhiteSpace(dto.ProfilePicUrl))
-                    user.ProfilePicUrl = dto.ProfilePicUrl.Trim();
-
-                // 4. Update password if provided
-                if (!string.IsNullOrEmpty(dto.Password))
-                {
-                    // Use the SAME hashing you use in your login/register code:
-                    // user.PasswordHash = YourPasswordHasher.Hash(dto.Password);
-
-                    // temporary unsafe version (only while testing, not for production):
-                    // user.PasswordHash = dto.Password;
-                }
-
-                // 5. Save changes
-                await _context.SaveChangesAsync();
-
-                // 6. Option A: return nothing (204)
-                // return NoContent();
-
-                // 6. Option B: return updated profile in same shape as GET /me
-                var profileData = await BuildProfileDataAsync(user);
-                return Ok(profileData);
-            }
-
-        }
     }
-
+}

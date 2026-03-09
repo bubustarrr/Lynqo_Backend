@@ -23,4 +23,8 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.14.0" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="wwwroot\media\images\profile_pictures\" />
+  </ItemGroup>
 </Project>
