@@ -43,7 +43,7 @@ namespace LynqoBackend.Controllers
         {
             var userId = GetUserId();
 
-            // Itt adjuk át az AutoRenew értéket is a DTO-ból a Service-nek!
+            // Itt adjuk át a 4 paramétert: userId, PlanName, QuantityMonths, AutoRenew
             var sub = await _subscriptionService.StartAsync(userId, dto.PlanName, dto.QuantityMonths, dto.AutoRenew);
 
             return Ok(sub);

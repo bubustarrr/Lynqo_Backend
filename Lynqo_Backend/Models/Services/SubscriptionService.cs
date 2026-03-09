@@ -1,8 +1,11 @@
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 using Lynqo_Backend.Data;
+using Lynqo_Backend.Models;
 using LynqoBackend.Models;
 using LynqoBackend.Models.DTOs;
-using Microsoft.EntityFrameworkCore;
-
 
 namespace LynqoBackend.Models.Services
 {
@@ -15,84 +18,90 @@ namespace LynqoBackend.Models.Services
             _context = context;
         }
 
+        // 1. A jelenlegi aktív elõfizetés lekérése
         public async Task<SubscriptionDTO?> GetCurrentAsync(int userId)
         {
-            var now = DateTime.UtcNow.Date;
-
-            var sub = await _context.Subscriptions
-                .Where(s => s.UserId == userId && (s.ExpiresAt == null || s.ExpiresAt >= now))
-                .OrderByDescending(s => s.StartsAt)
+            var activeSubscription = await _context.Subscriptions
+                .Where(s => s.UserId == userId && s.ExpiresAt > DateTime.UtcNow)
+                .OrderByDescending(s => s.ExpiresAt)
                 .FirstOrDefaultAsync();
 
-            if (sub == null) return null;
+            if (activeSubscription == null)
+            {
+                return null;
+            }
 
+            // DTO-ba csomagoljuk a választ a frontend számára
             return new SubscriptionDTO
             {
-                Id = sub.Id,
-                PlanName = sub.PlanName,
-                QuantityMonths = sub.QuantityMonths,
-                StartsAt = sub.StartsAt,
-                ExpiresAt = sub.ExpiresAt,
-                AutoRenew = sub.AutoRenew
+                Id = activeSubscription.Id,
+                PlanName = activeSubscription.PlanName ?? "basic",
+                QuantityMonths = activeSubscription.QuantityMonths,
+                StartsAt = activeSubscription.StartsAt,
+                ExpiresAt = activeSubscription.ExpiresAt,
+                AutoRenew = activeSubscription.AutoRenew
             };
         }
 
-        public async Task<SubscriptionDTO> StartAsync(int userId, string planName, int quantityMonths)
+        // 2. Új elõfizetés indítása (Itt van a 4 paraméter!)
+        public async Task<SubscriptionDTO> StartAsync(int userId, string planName, int quantityMonths, bool autoRenew)
         {
-            if (quantityMonths <= 0) quantityMonths = 1;
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null)
+            {
+                throw new Exception("User not found in database.");
+            }
 
-            var start = DateTime.UtcNow.Date;
-            var expires = start.AddMonths(quantityMonths);
-
-            var sub = new Subscription
+            // Létrehozzuk az új elõfizetés rekordot
+            var newSubscription = new Subscription
             {
                 UserId = userId,
                 PlanName = planName,
                 QuantityMonths = quantityMonths,
-                StartsAt = start,
-                ExpiresAt = expires,
-                AutoRenew = true,
-                Provider = "internal"
+                AutoRenew = autoRenew, // Itt mentjük a frontendrõl jövõ checkbox értékét
+                StartsAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddMonths(quantityMonths),
+                Provider = "System", // Késõbb ez lehet pl. "Stripe" vagy "PayPal"
+                TransactionId = Guid.NewGuid().ToString() // Generálunk egy egyedi azonosítót a tranzakciónak
             };
 
-            _context.Subscriptions.Add(sub);
+            _context.Subscriptions.Add(newSubscription);
 
-            var user = await _context.Users.FindAsync(userId);
-            if (user != null)
-                user.IsPremium = true;
+            // !! FONTOS !! Beállítjuk a felhasználót prémium taggá
+            user.IsPremium = true;
 
+            // Mentsük el a változásokat az adatbázisba
             await _context.SaveChangesAsync();
 
+            // Visszaadjuk a mentett adatokat DTO formájában
             return new SubscriptionDTO
             {
-                Id = sub.Id,
-                PlanName = sub.PlanName,
-                QuantityMonths = sub.QuantityMonths,
-                StartsAt = sub.StartsAt,
-                ExpiresAt = sub.ExpiresAt,
-                AutoRenew = sub.AutoRenew
+                Id = newSubscription.Id,
+                PlanName = newSubscription.PlanName,
+                QuantityMonths = newSubscription.QuantityMonths,
+                StartsAt = newSubscription.StartsAt,
+                ExpiresAt = newSubscription.ExpiresAt,
+                AutoRenew = newSubscription.AutoRenew
             };
         }
 
-        public async Task CancelAsync(int userId)
+        // 3. Elõfizetés lemondása (Auto-renew kikapcsolása)
+        public async Task<bool> CancelAsync(int userId)
         {
-            var now = DateTime.UtcNow.Date;
-
-            var sub = await _context.Subscriptions
-                .Where(s => s.UserId == userId && (s.ExpiresAt == null || s.ExpiresAt >= now))
-                .OrderByDescending(s => s.StartsAt)
+            var activeSubscription = await _context.Subscriptions
+                .Where(s => s.UserId == userId && s.ExpiresAt > DateTime.UtcNow && s.AutoRenew)
+                .OrderByDescending(s => s.ExpiresAt)
                 .FirstOrDefaultAsync();
 
-            if (sub == null) return;
+            if (activeSubscription != null)
+            {
+                // Nem töröljük az elõfizetést (hiszen már kifizette), csak a megújulást kapcsoljuk ki
+                activeSubscription.AutoRenew = false;
+                await _context.SaveChangesAsync();
+                return true;
+            }
 
-            sub.AutoRenew = false;
-
-            // Optionally downgrade immediately:
-            // sub.ExpiresAt = now;
-            // var user = await _context.Users.FindAsync(userId);
-            // if (user != null) user.IsPremium = false;
-
-            await _context.SaveChangesAsync();
+            return false;
         }
     }
 }
