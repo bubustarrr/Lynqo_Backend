@@ -36,9 +36,6 @@ namespace Lynqo_Backend.Controllers
             return null;
         }
 
-        // ==========================================
-        // 1. ÚJ: Felhasználók listázása a WPF számára
-        // ==========================================
         [HttpGet("users")]
         public async Task<IActionResult> GetUsers()
         {
@@ -52,7 +49,7 @@ namespace Lynqo_Backend.Controllers
                     Username = u.Username,
                     Email = u.Email,
                     Role = u.Role,
-                    // Megnézzük, van-e érvényes tiltása a felhasználónak
+                    IsPremium = u.IsPremium,
                     IsBanned = _context.BannedUsers.Any(b => b.UserId == u.Id && (b.BannedUntil == null || b.BannedUntil > DateTime.UtcNow))
                 })
                 .ToListAsync();
@@ -60,9 +57,6 @@ namespace Lynqo_Backend.Controllers
             return Ok(users);
         }
 
-        // ==========================================
-        // 2. ÚJ: Jogosultság (Rang) módosítása
-        // ==========================================
         [HttpPatch("users/{userId:int}/role")]
         public async Task<IActionResult> SetRole(int userId, [FromBody] RoleUpdateDto dto)
         {
@@ -80,9 +74,6 @@ namespace Lynqo_Backend.Controllers
             return Ok(new { message = "Szerepkör sikeresen frissítve." });
         }
 
-        // ==========================================
-        // 3. ÚJ: Profilkép URL módosítása
-        // ==========================================
         [HttpPatch("users/{userId:int}/profile-picture")]
         public async Task<IActionResult> SetProfilePic(int userId, [FromBody] ProfilePicUpdateDto dto)
         {
@@ -100,9 +91,65 @@ namespace Lynqo_Backend.Controllers
             return Ok(new { message = "Profilkép frissítve." });
         }
 
-        // ==========================================
-        // EREDETI VÉGPONTOK (Megtartva és ellenõrizve)
-        // ==========================================
+        [HttpPost("users/{userId:int}/subscription")]
+        public async Task<IActionResult> GrantSubscription(int userId, [FromBody] SubscriptionCreateDto dto)
+        {
+            var forbid = await RequireAdmin();
+            if (forbid != null) return forbid;
+            var adminId = GetUserId();
+
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null) return NotFound();
+
+            DateTime startDate = DateTime.UtcNow;
+            DateTime endDate = dto.DurationMonths == 12 ? startDate.AddYears(1) : startDate.AddMonths(1);
+
+            var newSubscription = new LynqoBackend.Models.Subscription
+            {
+                UserId = userId,
+                PlanName = dto.DurationMonths == 12 ? "Premium 1 Year" : "Premium 1 Month",
+                QuantityMonths = dto.DurationMonths,
+                StartsAt = startDate,
+                ExpiresAt = endDate,
+                AutoRenew = dto.AutoRenew, // <-- ITT BEÁLLÍTJUK AZ ÉRTÉKET A FRONTENDRÕL
+                Provider = "Admin Panel",
+                TransactionId = $"ADMIN-{Guid.NewGuid().ToString().Substring(0, 8)}"
+            };
+
+            _context.Subscriptions.Add(newSubscription);
+            user.IsPremium = true;
+            await _context.SaveChangesAsync();
+
+            await _admin.LogAdminAsync(adminId, "grant_subscription", userId, $"Granted {dto.DurationMonths} month(s) premium. Auto-renew: {dto.AutoRenew}");
+            return Ok(new { message = "Elõfizetés sikeresen hozzáadva." });
+        }
+
+        [HttpDelete("users/{userId:int}/subscription")]
+        public async Task<IActionResult> RevokeSubscription(int userId)
+        {
+            var forbid = await RequireAdmin();
+            if (forbid != null) return forbid;
+            var adminId = GetUserId();
+
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null) return NotFound();
+
+            var activeSubs = await _context.Subscriptions
+                .Where(s => s.UserId == userId && s.ExpiresAt > DateTime.UtcNow)
+                .ToListAsync();
+
+            foreach (var sub in activeSubs)
+            {
+                sub.ExpiresAt = DateTime.UtcNow;
+                sub.AutoRenew = false;
+            }
+
+            user.IsPremium = false;
+            await _context.SaveChangesAsync();
+
+            await _admin.LogAdminAsync(adminId, "revoke_subscription", userId, "Premium subscription revoked.");
+            return Ok(new { message = "Elõfizetés visszavonva." });
+        }
 
         [HttpGet("reports")]
         public async Task<IActionResult> GetReports([FromQuery] string status = "pending")
@@ -182,9 +229,6 @@ namespace Lynqo_Backend.Controllers
         }
     }
 
-    // ==========================================
-    // DTO Osztályok a bejövõ kérésekhez
-    // ==========================================
     public class RoleUpdateDto
     {
         public string Role { get; set; } = null!;
@@ -193,5 +237,11 @@ namespace Lynqo_Backend.Controllers
     public class ProfilePicUpdateDto
     {
         public string ProfilePicUrl { get; set; } = null!;
+    }
+
+    public class SubscriptionCreateDto
+    {
+        public int DurationMonths { get; set; }
+        public bool AutoRenew { get; set; } // <-- ÚJ MEZÕ ITT
     }
 }
