@@ -99,8 +99,7 @@ namespace Lynqo_Backend.Controllers
 
                 if (!string.IsNullOrWhiteSpace(dto.Password))
                 {
-                    // TODO: Replace with your real password hasher
-                    // user.PasswordHash = YourPasswordHasher.Hash(dto.Password);
+                    user.PasswordHash = PasswordHasher.HashPassword(dto.Password);
                 }
 
                 await _context.SaveChangesAsync();
