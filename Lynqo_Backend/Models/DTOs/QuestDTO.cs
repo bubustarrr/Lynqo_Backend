@@ -3,23 +3,13 @@ namespace LynqoBackend.Models.DTOs
     public class QuestDTO
     {
         public int Id { get; set; }
-        public string Title { get; set; } = "";
-        public string Description { get; set; } = "";
+        public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
         public int RewardXp { get; set; }
-        public string Duration { get; set; } = ""; // "daily" | "weekly"
-        public string Type { get; set; } = "";     // "lesson" | "practice"
+        public string Duration { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
         public int Progress { get; set; }
+        public int Target { get; set; }  // New: needed for the progress bar
         public bool IsCompleted { get; set; }
-    }
-
-    public class QuestProgressRequest
-    {
-        public int QuestId { get; set; }
-        public int ProgressDelta { get; set; } = 1;
-    }
-
-    public class QuestClaimRequest
-    {
-        public int QuestId { get; set; }
     }
 }

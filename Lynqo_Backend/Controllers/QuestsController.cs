@@ -1,7 +1,5 @@
 using System.Security.Claims;
 using Lynqo_Backend.Models.Services;
-using Lynqo_Backend.Data;
-using LynqoBackend.Models.DTOs;
 using LynqoBackend.Models.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +8,7 @@ namespace LynqoBackend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize] // all endpoints require JWT
+    [Authorize]
     public class QuestsController : ControllerBase
     {
         private readonly GamificationService _gamificationService;
@@ -26,9 +24,7 @@ namespace LynqoBackend.Controllers
                        ?? User.FindFirst(ClaimTypes.NameIdentifier)
                        ?? User.FindFirst("sub");
 
-            if (claim == null)
-                throw new InvalidOperationException("User ID claim missing.");
-
+            if (claim == null) throw new InvalidOperationException("User ID claim missing.");
             return int.Parse(claim.Value);
         }
 
@@ -47,13 +43,11 @@ namespace LynqoBackend.Controllers
             await _gamificationService.UpdateQuestProgressAsync(userId, dto.QuestId, dto.ProgressDelta);
             return Ok(new { message = "Progress updated." });
         }
+    }
 
-        [HttpPost("claim")]
-        public async Task<IActionResult> Claim([FromBody] QuestClaimRequest dto)
-        {
-            var userId = GetUserId();
-            var xpAwarded = await _gamificationService.ClaimQuestRewardAsync(userId, dto.QuestId);
-            return Ok(new { message = "Quest reward claimed.", xpAwarded });
-        }
+    public class QuestProgressRequest
+    {
+        public int QuestId { get; set; }
+        public int ProgressDelta { get; set; }
     }
 }

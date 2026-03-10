@@ -44,7 +44,6 @@ namespace Lynqo_Backend.Models.Services
 
         public async Task<List<QuestDTO>> GetActiveQuestsAsync(int userId)
         {
-            // For now: all quests are “active”; later you can filter by date/duration.
             var quests = await _context.Quests.ToListAsync();
 
             var userQuestLookup = await _context.UserQuests
@@ -62,11 +61,13 @@ namespace Lynqo_Backend.Models.Services
                     RewardXp = q.RewardXp,
                     Duration = q.Duration,
                     Type = q.Type,
+                    Target = q.TargetAmount, // Send target to frontend
                     Progress = uq?.Progress ?? 0,
                     IsCompleted = uq?.CompletedAt != null
                 };
             }).ToList();
         }
+
 
         public async Task UpdateQuestProgressAsync(int userId, int questId, int delta)
         {

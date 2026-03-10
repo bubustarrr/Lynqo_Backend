@@ -190,13 +190,6 @@ public class LynqoDbContext : DbContext
         modelBuilder.Entity<Quest>()
             .Property(q => q.RewardXp).HasColumnName("reward_xp");
 
-        modelBuilder.Entity<UserQuest>()
-            .Property(uq => uq.UserId).HasColumnName("user_id");
-        modelBuilder.Entity<UserQuest>()
-            .Property(uq => uq.QuestId).HasColumnName("quest_id");
-        modelBuilder.Entity<UserQuest>()
-            .Property(uq => uq.CompletedAt).HasColumnName("completed_at");
-
         // --- 2. STORE Mappings ---
         modelBuilder.Entity<StoreItem>()
             .Property(s => s.MaxQuantity).HasColumnName("max_quantity");
