@@ -38,8 +38,7 @@ public class LynqoDbContext : DbContext
     public DbSet<ApiToken> ApiTokens { get; set; }
     public DbSet<Course> Courses { get; set; }
     public DbSet<UserCourse> UserCourses { get; set; }
-
-
+    public DbSet<Language> Languages { get; set; }
 
 
 
