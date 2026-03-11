@@ -63,9 +63,26 @@ namespace Lynqo_Backend.Controllers
             return Ok(units);
         }
 
+        // GET: api/lessons/5
+        // This grabs the lesson, but blocks access if hearts are 0
         [HttpGet("{id}")]
+        [Authorize]
         public async Task<IActionResult> GetLesson(int id)
         {
+            // Check who is requesting the lesson
+            var userIdClaim = User.FindFirst("id") ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+            if (userIdClaim == null) return Unauthorized();
+            int userId = int.Parse(userIdClaim.Value);
+
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null) return NotFound("User not found");
+
+            // Block entry if they have 0 hearts and are not Premium!
+            if (user.Hearts <= 0 && !user.IsPremium)
+            {
+                return BadRequest(new { Message = "NO_HEARTS" });
+            }
+
             var lesson = await _context.Lessons.FindAsync(id);
             if (lesson == null) return NotFound();
 
@@ -116,6 +133,8 @@ namespace Lynqo_Backend.Controllers
             return NoContent();
         }
 
+        // POST: api/lessons/5/complete
+        // This is the correct CompleteLesson endpoint that saves XP & Quests
         [HttpPost("{id}/complete")]
         [Authorize]
         public async Task<IActionResult> CompleteLesson(int id, [FromBody] LessonCompleteDto dto)
@@ -168,18 +187,11 @@ namespace Lynqo_Backend.Controllers
 
             await _context.SaveChangesAsync();
 
-            // -------------------------------------------------------------
-            // 🔥 TRIGGERS FOR DAILY QUESTS 🔥
-            // Assuming Quest ID 1 = "Complete 1 Lesson"
-            // Assuming Quest ID 2 = "Complete 3 Lessons"
-            // -------------------------------------------------------------
-
+            // 4. TRIGGERS FOR DAILY QUESTS
             await _gamificationService.UpdateQuestProgressAsync(userId, 1, 1);
             await _gamificationService.UpdateQuestProgressAsync(userId, 2, 1);
 
-            // -------------------------------------------------------------
-
-            // 4. Calculate New Total XP to return to frontend
+            // 5. Calculate New Total XP to return to frontend
             int currentTotalXp = await _context.UserXps
                 .Where(x => x.UserId == userId)
                 .SumAsync(x => x.XpAmount);
@@ -191,6 +203,29 @@ namespace Lynqo_Backend.Controllers
                 Hearts = user.Hearts,
                 TotalXp = currentTotalXp
             });
+        }
+
+        // NEW ENDPOINT: Save hearts if a user dies or quits early
+        [HttpPost("sync-hearts")]
+        [Authorize]
+        public async Task<IActionResult> SyncHearts([FromBody] int heartsRemaining)
+        {
+            var userIdClaim = User.FindFirst("id") ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+            if (userIdClaim == null) return Unauthorized();
+
+            int userId = int.Parse(userIdClaim.Value);
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null) return NotFound("User not found");
+
+            // Don't deduct hearts if they are premium
+            if (!user.IsPremium)
+            {
+                // Ensure hearts never go below 0
+                user.Hearts = Math.Max(0, heartsRemaining);
+                await _context.SaveChangesAsync();
+            }
+
+            return Ok(new { Hearts = user.Hearts });
         }
     }
 }
