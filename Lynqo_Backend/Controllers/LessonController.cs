@@ -1,5 +1,6 @@
 ﻿using Lynqo_Backend.Data;
 using Lynqo_Backend.Models;
+using Lynqo_Backend.Models.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,14 +14,14 @@ namespace Lynqo_Backend.Controllers
     public class LessonsController : ControllerBase
     {
         private readonly LynqoDbContext _context;
+        private readonly GamificationService _gamificationService; // Injected!
 
-        public LessonsController(LynqoDbContext context)
+        public LessonsController(LynqoDbContext context, GamificationService gamificationService)
         {
             _context = context;
+            _gamificationService = gamificationService;
         }
 
-        // GET: api/lessons/course/1
-        // Get generic list of lessons (without units)
         [HttpGet("course/{courseId}")]
         public async Task<IActionResult> GetLessonsByCourse(int courseId)
         {
@@ -39,16 +40,15 @@ namespace Lynqo_Backend.Controllers
             if (!int.TryParse(userIdString, out int userId)) return Unauthorized();
 
             var units = await _context.Units
-                .Where(u => u.CourseId == courseId) // 1. Only French Units
+                .Where(u => u.CourseId == courseId)
                 .OrderBy(u => u.OrderIndex)
                 .Select(u => new
                 {
                     u.Id,
                     u.Title,
                     u.Description,
-                    // 2. DOUBLE FILTER: Only grab lessons that ALSO match the courseId!
                     Lessons = u.Lessons
-                        .Where(l => l.CourseId == courseId) // <--- THIS BLOCKS THE SPANISH LEAK!
+                        .Where(l => l.CourseId == courseId)
                         .OrderBy(l => l.OrderIndex)
                         .Select(l => new
                         {
@@ -63,11 +63,6 @@ namespace Lynqo_Backend.Controllers
             return Ok(units);
         }
 
-
-
-        // GET: api/lessons/5
-        // Get a specific lesson AND its contents (questions)
-        // Used when the user clicks "Start Lesson"
         [HttpGet("{id}")]
         public async Task<IActionResult> GetLesson(int id)
         {
@@ -78,7 +73,6 @@ namespace Lynqo_Backend.Controllers
                 .Where(lc => lc.LessonId == id)
                 .ToListAsync();
 
-            // Map content to a cleaner structure with parsed JSON options
             var cleanedContents = contents.Select(c => new
             {
                 c.Id,
@@ -86,7 +80,6 @@ namespace Lynqo_Backend.Controllers
                 c.Question,
                 c.Answer,
                 c.MediaId,
-                // Try to parse options if they exist, otherwise null
                 Options = string.IsNullOrEmpty(c.Options)
                     ? null
                     : JsonSerializer.Deserialize<object>(c.Options)
@@ -99,8 +92,6 @@ namespace Lynqo_Backend.Controllers
             });
         }
 
-        // POST: api/lessons
-        // Create a new lesson (Admin only usually)
         [HttpPost]
         public async Task<ActionResult<Lesson>> CreateLesson(Lesson lesson)
         {
@@ -110,7 +101,6 @@ namespace Lynqo_Backend.Controllers
             return CreatedAtAction(nameof(GetLesson), new { id = lesson.Id }, lesson);
         }
 
-        // DELETE: api/lessons/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteLesson(int id)
         {
@@ -126,7 +116,6 @@ namespace Lynqo_Backend.Controllers
             return NoContent();
         }
 
-        // POST: api/lessons/5/complete
         [HttpPost("{id}/complete")]
         [Authorize]
         public async Task<IActionResult> CompleteLesson(int id, [FromBody] LessonCompleteDto dto)
@@ -141,7 +130,7 @@ namespace Lynqo_Backend.Controllers
             if (user == null) return NotFound("User not found");
             user.Hearts = dto.HeartsRemaining;
 
-            // 2. Insert XP History Record (This is how we track XP now)
+            // 2. Insert XP History Record 
             var xpEntry = new UserXp
             {
                 UserId = userId,
@@ -149,9 +138,6 @@ namespace Lynqo_Backend.Controllers
                 Source = "lesson",
                 CreatedAt = DateTime.UtcNow
             };
-
-            // 🔥 IMPORTANT: Ensure this matches your DbContext property name!
-            // It is likely _context.UserXp or _context.UserXps. Check your DbContext!
             _context.UserXps.Add(xpEntry);
 
             // 3. Update Lesson Progress
@@ -182,8 +168,18 @@ namespace Lynqo_Backend.Controllers
 
             await _context.SaveChangesAsync();
 
+            // -------------------------------------------------------------
+            // 🔥 TRIGGERS FOR DAILY QUESTS 🔥
+            // Assuming Quest ID 1 = "Complete 1 Lesson"
+            // Assuming Quest ID 2 = "Complete 3 Lessons"
+            // -------------------------------------------------------------
+
+            await _gamificationService.UpdateQuestProgressAsync(userId, 1, 1);
+            await _gamificationService.UpdateQuestProgressAsync(userId, 2, 1);
+
+            // -------------------------------------------------------------
+
             // 4. Calculate New Total XP to return to frontend
-            // We sum up all records in the UserXp table for this user
             int currentTotalXp = await _context.UserXps
                 .Where(x => x.UserId == userId)
                 .SumAsync(x => x.XpAmount);
@@ -193,9 +189,8 @@ namespace Lynqo_Backend.Controllers
                 Message = "Lesson completed!",
                 XpAwarded = dto.XpEarned,
                 Hearts = user.Hearts,
-                TotalXp = currentTotalXp // Sending the calculated sum back
+                TotalXp = currentTotalXp
             });
         }
-
     }
 }

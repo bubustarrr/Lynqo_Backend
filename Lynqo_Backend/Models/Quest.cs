@@ -16,16 +16,16 @@ namespace LynqoBackend.Models
         [Column("description")]
         public string Description { get; set; } = string.Empty;
 
-        [Column("rewardxp")]
+        [Column("reward_xp")]
         public int RewardXp { get; set; }
 
         [Column("duration")]
-        public string Duration { get; set; } = "daily"; // daily | weekly
+        public string Duration { get; set; } = "daily";
 
         [Column("type")]
-        public string Type { get; set; } = "lesson"; // lesson | practice
+        public string Type { get; set; } = "lesson";
 
-        [NotMapped]
-        public int TargetAmount { get; set; } = 3;
+        [Column("target_amount")]
+        public int TargetAmount { get; set; }
     }
 }

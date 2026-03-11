@@ -1,9 +1,12 @@
 ﻿using Lynqo_Backend.Data;
-using Lynqo_Backend.Models;
 using Lynqo_Backend.Models.DTOs;
 using LynqoBackend.Models;
 using LynqoBackend.Models.DTOs;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Lynqo_Backend.Models.Services
 {
@@ -18,7 +21,7 @@ namespace Lynqo_Backend.Models.Services
 
         public async Task AddXpAsync(int userId, int xpAmount, string source = "lesson")
         {
-            var xp = new UserXp { UserId = userId, XpAmount = xpAmount, Source = source };
+            var xp = new UserXp { UserId = userId, XpAmount = xpAmount, Source = source, CreatedAt = DateTime.UtcNow };
             _context.UserXps.Add(xp);
             await _context.SaveChangesAsync();
         }
@@ -45,15 +48,42 @@ namespace Lynqo_Backend.Models.Services
         public async Task<List<QuestDTO>> GetActiveQuestsAsync(int userId)
         {
             var quests = await _context.Quests.ToListAsync();
+            var today = DateTime.UtcNow.Date;
 
-            var userQuestLookup = await _context.UserQuests
+            var userQuests = await _context.UserQuests
                 .Where(uq => uq.UserId == userId)
-                .ToDictionaryAsync(uq => uq.QuestId, uq => uq);
+                .ToListAsync();
 
-            return quests.Select(q =>
+            var result = new List<QuestDTO>();
+
+            foreach (var q in quests)
             {
-                userQuestLookup.TryGetValue(q.Id, out var uq);
-                return new QuestDTO
+                var uq = userQuests.FirstOrDefault(u => u.QuestId == q.Id);
+
+                int currentProgress = 0;
+                bool isCompleted = false;
+
+                if (uq != null)
+                {
+                    // Check if the progress was made today
+                    bool completedToday = uq.CompletedAt.HasValue && uq.CompletedAt.Value.Date == today;
+
+                    // DAILY REFRESH: If it was completed on a previous day, send 0 progress to React!
+                    if (uq.CompletedAt.HasValue && uq.CompletedAt.Value.Date < today)
+                    {
+                        currentProgress = 0;
+                        isCompleted = false;
+                    }
+                    else
+                    {
+                        currentProgress = uq.Progress;
+                        isCompleted = completedToday;
+                    }
+                }
+
+                int targetAmount = q.TargetAmount > 0 ? q.TargetAmount : 1;
+
+                result.Add(new QuestDTO
                 {
                     Id = q.Id,
                     Title = q.Title,
@@ -61,36 +91,73 @@ namespace Lynqo_Backend.Models.Services
                     RewardXp = q.RewardXp,
                     Duration = q.Duration,
                     Type = q.Type,
-                    Target = q.TargetAmount, // Send target to frontend
-                    Progress = uq?.Progress ?? 0,
-                    IsCompleted = uq?.CompletedAt != null
-                };
-            }).ToList();
-        }
+                    Target = targetAmount,
+                    Progress = currentProgress,
+                    IsCompleted = isCompleted
+                });
+            }
 
+            return result;
+        }
 
         public async Task UpdateQuestProgressAsync(int userId, int questId, int delta)
         {
             var quest = await _context.Quests.FindAsync(questId);
-            if (quest == null) throw new InvalidOperationException("Quest not found.");
+            if (quest == null) return;
 
             var userQuest = await _context.UserQuests
                 .FirstOrDefaultAsync(uq => uq.UserId == userId && uq.QuestId == questId);
 
+            var today = DateTime.UtcNow.Date;
+            int targetAmount = quest.TargetAmount > 0 ? quest.TargetAmount : 1;
+
             if (userQuest == null)
             {
+                // First time ever doing this quest
                 userQuest = new UserQuest
                 {
                     UserId = userId,
                     QuestId = questId,
-                    Progress = Math.Max(0, delta),
-                    CompletedAt = null
+                    Progress = delta,
+                    CompletedAt = null // we use CompletedAt as a timestamp
                 };
                 _context.UserQuests.Add(userQuest);
             }
             else
             {
-                userQuest.Progress = Math.Max(0, userQuest.Progress + delta);
+                // DAILY REFRESH: If the user quest was updated on a PREVIOUS day, reset it for today
+                if (userQuest.CompletedAt.HasValue && userQuest.CompletedAt.Value.Date < today)
+                {
+                    userQuest.Progress = 0;
+                    userQuest.CompletedAt = null;
+                }
+
+                // Only add progress if it's not already completed TODAY
+                if (!userQuest.CompletedAt.HasValue || userQuest.CompletedAt.Value.Date < today)
+                {
+                    userQuest.Progress += delta;
+                }
+            }
+
+            // --- AUTO-CLAIM LOGIC ---
+            // If they just hit the target...
+            if (userQuest.Progress >= targetAmount && (!userQuest.CompletedAt.HasValue || userQuest.CompletedAt.Value.Date < today))
+            {
+                // Lock it at max target
+                userQuest.Progress = targetAmount;
+
+                // Mark it as completed today
+                userQuest.CompletedAt = DateTime.UtcNow;
+
+                // Automatically add the XP to the user's account right now!
+                var xpEntry = new UserXp
+                {
+                    UserId = userId,
+                    XpAmount = quest.RewardXp,
+                    Source = "legendary", // Tag it so you know it came from a quest
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.UserXps.Add(xpEntry);
             }
 
             await _context.SaveChangesAsync();
@@ -98,23 +165,7 @@ namespace Lynqo_Backend.Models.Services
 
         public async Task<int> ClaimQuestRewardAsync(int userId, int questId)
         {
-            var quest = await _context.Quests.FindAsync(questId);
-            if (quest == null) throw new InvalidOperationException("Quest not found.");
-
-            var userQuest = await _context.UserQuests
-                .FirstOrDefaultAsync(uq => uq.UserId == userId && uq.QuestId == questId);
-
-            if (userQuest == null || userQuest.CompletedAt != null)
-                throw new InvalidOperationException("Quest not completed or already claimed.");
-
-            // Mark as completed now (you can also enforce a min progress if you add that field)
-            userQuest.CompletedAt = DateTime.UtcNow;
-
-            await AddXpAsync(userId, quest.RewardXp, "lesson"); // or "practice" based on quest.Type
-
-            await _context.SaveChangesAsync();
-
-            return quest.RewardXp;
+            return await Task.FromResult(0);
         }
     }
 }
