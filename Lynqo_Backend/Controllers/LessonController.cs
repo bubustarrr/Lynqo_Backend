@@ -9,12 +9,32 @@ using System.Text.Json;
 
 namespace Lynqo_Backend.Controllers
 {
+    // -------------------------------------------------------------
+    // DTOs for the LessonsController
+    // -------------------------------------------------------------
+    public class SyncHeartsDto
+    {
+        public int HeartsRemaining { get; set; }
+    }
+
+    public class LessonCompleteDto
+    {
+        public int Score { get; set; }
+        public int Stars { get; set; }
+        public int XpEarned { get; set; }
+        public int HeartsRemaining { get; set; }
+        public int TimeSpentSeconds { get; set; }
+    }
+
+    // -------------------------------------------------------------
+    // Controller 
+    // -------------------------------------------------------------
     [Route("api/[controller]")]
     [ApiController]
     public class LessonsController : ControllerBase
     {
         private readonly LynqoDbContext _context;
-        private readonly GamificationService _gamificationService; // Injected!
+        private readonly GamificationService _gamificationService;
 
         public LessonsController(LynqoDbContext context, GamificationService gamificationService)
         {
@@ -64,7 +84,6 @@ namespace Lynqo_Backend.Controllers
         }
 
         // GET: api/lessons/5
-        // This grabs the lesson, but blocks access if hearts are 0
         [HttpGet("{id}")]
         [Authorize]
         public async Task<IActionResult> GetLesson(int id)
@@ -105,7 +124,9 @@ namespace Lynqo_Backend.Controllers
             return Ok(new
             {
                 Lesson = lesson,
-                Contents = cleanedContents
+                Contents = cleanedContents,
+                Hearts = user.Hearts,
+                IsPremium = user.IsPremium
             });
         }
 
@@ -134,7 +155,6 @@ namespace Lynqo_Backend.Controllers
         }
 
         // POST: api/lessons/5/complete
-        // This is the correct CompleteLesson endpoint that saves XP & Quests
         [HttpPost("{id}/complete")]
         [Authorize]
         public async Task<IActionResult> CompleteLesson(int id, [FromBody] LessonCompleteDto dto)
@@ -208,7 +228,7 @@ namespace Lynqo_Backend.Controllers
         // NEW ENDPOINT: Save hearts if a user dies or quits early
         [HttpPost("sync-hearts")]
         [Authorize]
-        public async Task<IActionResult> SyncHearts([FromBody] int heartsRemaining)
+        public async Task<IActionResult> SyncHearts([FromBody] SyncHeartsDto dto)
         {
             var userIdClaim = User.FindFirst("id") ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
             if (userIdClaim == null) return Unauthorized();
@@ -220,8 +240,7 @@ namespace Lynqo_Backend.Controllers
             // Don't deduct hearts if they are premium
             if (!user.IsPremium)
             {
-                // Ensure hearts never go below 0
-                user.Hearts = Math.Max(0, heartsRemaining);
+                user.Hearts = Math.Max(0, dto.HeartsRemaining);
                 await _context.SaveChangesAsync();
             }
 
