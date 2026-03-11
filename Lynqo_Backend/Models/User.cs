@@ -45,6 +45,13 @@ namespace Lynqo_Backend.Models
         [Column("last_heart_refill_at")]
         public DateTime? LastHeartRefillAt { get; set; }
 
+        // --- ÚJ MEZŐK A STREAK-HEZ ---
+        [Column("streak")]
+        public int Streak { get; set; } = 0;
+
+        [Column("last_lesson_date")]
+        public DateTime? LastLessonDate { get; set; }
+
         // Navigation properties (needed by DbContext)
         public ICollection<UserXp> XpHistory { get; set; } = new List<UserXp>();
         public ICollection<UserLesson> UserLessons { get; set; } = new List<UserLesson>();

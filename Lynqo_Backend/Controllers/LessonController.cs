@@ -169,6 +169,28 @@ namespace Lynqo_Backend.Controllers
             if (user == null) return NotFound("User not found");
             user.Hearts = dto.HeartsRemaining;
 
+            // ========================================================
+            // ÚJ: DAILY STREAK (Napi Sorozat) logika
+            // ========================================================
+            var today = DateTime.UtcNow.Date;
+            var lastLessonDate = user.LastLessonDate?.Date;
+
+            if (lastLessonDate == null || lastLessonDate < today.AddDays(-1))
+            {
+                // Ha régebben volt mint tegnap (vagy még soha nem játszott), a streak újraindul 1-ről
+                user.Streak = 1;
+            }
+            else if (lastLessonDate == today.AddDays(-1))
+            {
+                // Ha pontosan tegnap játszott, akkor a streak nő 1-gyel
+                user.Streak += 1;
+            }
+            // Ha lastLessonDate == today, nem csinálunk semmit, a streak marad a jelenlegi.
+
+            // Mindenképpen frissítjük az utolsó lecke dátumát a mai napra/mostani pillanatra
+            user.LastLessonDate = DateTime.UtcNow;
+            // ========================================================
+
             // 2. Insert XP History Record 
             var xpEntry = new UserXp
             {
@@ -221,7 +243,8 @@ namespace Lynqo_Backend.Controllers
                 Message = "Lesson completed!",
                 XpAwarded = dto.XpEarned,
                 Hearts = user.Hearts,
-                TotalXp = currentTotalXp
+                TotalXp = currentTotalXp,
+                Streak = user.Streak // Visszaküldjük a frontednek az új streak-et is!
             });
         }
 
