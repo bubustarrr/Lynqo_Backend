@@ -105,6 +105,56 @@ namespace Lynqo_Backend.Controllers
             }
         }
 
+        [HttpGet("{id:int}")]
+        public async Task<IActionResult> GetMediaById(int id)
+        {
+            // 1. NAPLÓZÁS: Látni fogjuk, ha egyáltalán bejött a kérés
+            Console.WriteLine($"\n[AUDIO DEBUG] --- ÚJ KÉRÉS ÉRKEZETT AZ ID-RE: {id} ---");
+
+            try
+            {
+                var mediaFile = await _context.MediaFiles.FindAsync(id);
+                if (mediaFile == null)
+                {
+                    Console.WriteLine($"[AUDIO DEBUG] ❌ HIBA: Nincs {id}-es ID a media_files táblában!");
+                    return NotFound("Media nem található az adatbázisban.");
+                }
+
+                Console.WriteLine($"[AUDIO DEBUG] ✅ Adatbázisban megtalálva. Fájl URL: {mediaFile.FileUrl}");
+
+                var rootPath = _environment.WebRootPath;
+                if (string.IsNullOrEmpty(rootPath))
+                {
+                    rootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+                }
+
+                // Biztonságos útvonal összefűzés
+                var relativePath = mediaFile.FileUrl?.TrimStart('/', '\\') ?? "";
+                var filePath = Path.Combine(rootPath, relativePath);
+
+                Console.WriteLine($"[AUDIO DEBUG] Keresett fizikai mappa útvonal: {filePath}");
+
+                if (!System.IO.File.Exists(filePath))
+                {
+                    Console.WriteLine($"[AUDIO DEBUG] ❌ HIBA: A fájl fizikailag nem létezik ezen a helyen!");
+                    return NotFound($"A fájl fizikailag nem található: {filePath}");
+                }
+
+                var ext = Path.GetExtension(filePath).ToLower();
+                var contentType = ext == ".mp3" ? "audio/mpeg" : (ext == ".wav" ? "audio/wav" : "application/octet-stream");
+
+                Console.WriteLine($"[AUDIO DEBUG] ✅ Fájl sikeresen kiküldve a böngészőnek! Típus: {contentType}");
+
+                // A 'true' a végén nagyon fontos! Ez engedi a böngészőnek a hang lejátszását és tekerését.
+                return PhysicalFile(filePath, contentType, true);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AUDIO DEBUG] ❌ VÉGZETES BELSŐ HIBA: {ex.Message}");
+                return StatusCode(500, "Belső szerverhiba történt: " + ex.Message);
+            }
+        }
+
 
 
 
