@@ -1,13 +1,20 @@
-﻿using Lynqo_Backend.Data;
+﻿using System;
+using System.Security.Cryptography;
+using System.Threading.Tasks;
+using System.Linq;
+using Lynqo_Backend.Data;
 using Lynqo_Backend.Helpers;
 using Lynqo_Backend.Models;
 using Lynqo_Backend.Models.DTOs;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Cryptography;
+using Microsoft.Extensions.Configuration;
 
 namespace Lynqo_Backend.Controllers
 {
+    /// <summary>
+    /// Handles user authentication including registration, login, and token refreshing.
+    /// </summary>
     [Route("api/[controller]")]
     [ApiController]
     public class AuthController : ControllerBase
@@ -21,12 +28,14 @@ namespace Lynqo_Backend.Controllers
             _config = config;
         }
 
+        /// <summary>
+        /// Registers a new user with default stats (5 hearts, 0 coins, user role).
+        /// </summary>
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] UserRegisterDTO dto)
         {
-            // (Keep your existing Register code exactly as is)
-            if (_context.Users.Any(u => u.Username == dto.Username || u.Email == dto.Email))
-                return BadRequest(new { error = "Username or email already taken." });
+            if (await _context.Users.AnyAsync(u => u.Username == dto.Username || u.Email == dto.Email))
+                return BadRequest(new { error = "Username or email is already taken." });
 
             var user = new User
             {
@@ -40,11 +49,16 @@ namespace Lynqo_Backend.Controllers
                 Role = "user",
                 CreatedAt = DateTime.UtcNow
             };
+
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
+
             return Ok(new { user.Username, user.DisplayName, user.Email });
         }
 
+        /// <summary>
+        /// Authenticates a user, checks for active bans, and issues JWT and Refresh tokens.
+        /// </summary>
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] UserLoginDTO dto)
         {
@@ -54,88 +68,85 @@ namespace Lynqo_Backend.Controllers
             if (user == null || !PasswordHasher.VerifyPassword(user.PasswordHash, dto.Password))
                 return Unauthorized(new { error = "Invalid credentials." });
 
-            Console.WriteLine($"[DEBUG] Checking ban for UserID: {user.Id}");
-
-            var bans = await _context.BannedUsers.Where(b => b.UserId == user.Id).ToListAsync();
-            Console.WriteLine($"[DEBUG] Found {bans.Count} ban records for this user.");
-
-            foreach (var b in bans)
-            {
-                Console.WriteLine($"[DEBUG] Ban ID: {b.Id}, Expires: {b.BannedUntil}, IsActive: {b.BannedUntil == null || b.BannedUntil > DateTime.UtcNow}");
-            }
-            // ---------------------
-
+            // Check if the user has an active ban
             var activeBan = await _context.BannedUsers
-                .Where(b => b.UserId == user.Id && (b.BannedUntil == null || b.BannedUntil > DateTime.UtcNow))
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync(b => b.UserId == user.Id && (b.BannedUntil == null || b.BannedUntil > DateTime.UtcNow));
 
             if (activeBan != null)
             {
-                Console.WriteLine("[DEBUG] User IS BANNED. Blocking."); // Log block
                 return Unauthorized(new { error = "Account banned.", reason = activeBan.Reason });
-            }
-            else
-            {
-                Console.WriteLine("[DEBUG] User is NOT banned. Allowing."); // Log allow
             }
 
             // 1. Generate Access Token (JWT)
-            var accessToken = JwtHelper.GenerateJwtToken(user,
-                _config["Jwt:Key"], _config["Jwt:Issuer"], _config["Jwt:Audience"],
-                15); // Short expiry (15 mins)
+            var accessToken = JwtHelper.GenerateJwtToken(
+                user,
+                _config["Jwt:Key"],
+                _config["Jwt:Issuer"],
+                _config["Jwt:Audience"],
+                15
+            );
 
-            // 2. Generate Refresh Token (Random String)
+            // 2. Generate Refresh Token (Random 64-byte string)
             var refreshToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
 
-            // 3. Save Refresh Token to DB
+            // 3. Save Refresh Token to DB - 30 day expiry
             var apiToken = new ApiToken
             {
                 UserId = user.Id,
                 Token = refreshToken,
                 Scopes = "refresh_token",
                 CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddDays(30) // Long expiry (30 days)
+                ExpiresAt = DateTime.UtcNow.AddDays(30)
             };
+
             _context.ApiTokens.Add(apiToken);
             await _context.SaveChangesAsync();
 
             return Ok(new
             {
                 token = accessToken,
-                refreshToken = refreshToken, // Send this to frontend!
+                refreshToken = refreshToken,
                 user = new { user.Username, user.DisplayName, user.Email }
             });
         }
 
+        /// <summary>
+        /// Generates a new JWT access token using a valid refresh token. Rotates the refresh token.
+        /// </summary>
         [HttpPost("refresh")]
         public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
         {
-            // 1. Find the token in DB
+            // 1. Find the token in the database
             var storedToken = await _context.ApiTokens
                 .Include(t => t.User)
                 .FirstOrDefaultAsync(t => t.Token == request.RefreshToken);
 
-            // 2. Validate it
+            // 2. Validate token existence and expiration
             if (storedToken == null)
-                return Unauthorized("Invalid refresh token.");
+                return Unauthorized(new { error = "Invalid refresh token." });
 
             if (storedToken.ExpiresAt < DateTime.UtcNow)
             {
-                _context.ApiTokens.Remove(storedToken); // Delete expired token
+                _context.ApiTokens.Remove(storedToken); // Clean up expired token
                 await _context.SaveChangesAsync();
-                return Unauthorized("Refresh token expired. Please login again.");
+                return Unauthorized(new { error = "Refresh token expired. Please log in again." });
             }
 
             // 3. Generate NEW Access Token
-            var newAccessToken = JwtHelper.GenerateJwtToken(storedToken.User,
-                _config["Jwt:Key"], _config["Jwt:Issuer"], _config["Jwt:Audience"],
-                15);
+            var newAccessToken = JwtHelper.GenerateJwtToken(
+                storedToken.User,
+                _config["Jwt:Key"],
+                _config["Jwt:Issuer"],
+                _config["Jwt:Audience"],
+                15
+            );
 
-            // 4. Rotate Refresh Token (Optional security best practice: create a new one, delete old)
+            // 4. Rotate Refresh Token (Security best practice: invalidate old, create new)
             var newRefreshToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
 
-            storedToken.Token = newRefreshToken; // Update existing row
-            storedToken.ExpiresAt = DateTime.UtcNow.AddDays(30); // Extend life
+            storedToken.Token = newRefreshToken;
+            storedToken.ExpiresAt = DateTime.UtcNow.AddDays(30);
+
             await _context.SaveChangesAsync();
 
             return Ok(new
@@ -146,9 +157,10 @@ namespace Lynqo_Backend.Controllers
         }
     }
 
-    // DTO for the Refresh Request
+    #region DTOs
     public class RefreshTokenRequest
     {
-        public string RefreshToken { get; set; }
+        public string RefreshToken { get; set; } = null!;
     }
+    #endregion
 }
