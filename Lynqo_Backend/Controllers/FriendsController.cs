@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using LynqoBackend.Models.DTOs;
 using LynqoBackend.Models.Services;
+using Lynqo_Backend.Data; // Az adatbázisodhoz szükséges using
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace LynqoBackend.Controllers
 {
@@ -12,10 +14,13 @@ namespace LynqoBackend.Controllers
     public class FriendsController : ControllerBase
     {
         private readonly SocialService _social;
+        private readonly LynqoDbContext _context; // ÚJ: DB kapcsolat a kereséshez
 
-        public FriendsController(SocialService social)
+        // ÚJ: A konstruktor most már a LynqoDbContext-et is elkéri
+        public FriendsController(SocialService social, LynqoDbContext context)
         {
             _social = social;
+            _context = context;
         }
 
         private int GetUserId()
@@ -51,11 +56,40 @@ namespace LynqoBackend.Controllers
             return Ok(new { message = "Friend request sent." });
         }
 
+        // --- ÚJ VÉGPONT: Keresés és jelölés név vagy email alapján ---
+        [HttpPost("request-by-identifier")]
+        public async Task<IActionResult> SendRequestByIdentifier([FromBody] FriendRequestByIdentifierDTO dto)
+        {
+            var userId = GetUserId();
+
+            // 1. Keresés az adatbázisban a Név vagy Email alapján
+            var targetUser = await _context.Users.FirstOrDefaultAsync(u =>
+                u.Username == dto.Identifier ||
+                u.Email == dto.Identifier);
+
+            if (targetUser == null)
+                return NotFound(new { message = "Nem található felhasználó ezzel a névvel vagy email címmel." });
+
+            if (targetUser.Id == userId)
+                return BadRequest(new { message = "Magadat nem veheted fel barátnak!" });
+
+            // 2. Mentés a SocialService-en keresztül
+            try
+            {
+                await _social.SendRequestAsync(userId, targetUser.Id);
+                return Ok(new { message = "Barátnak jelölés sikeresen elküldve!" });
+            }
+            catch (Exception ex)
+            {
+                // Ha már barátok, vagy van függõben lévõ kérés
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpPost("respond")]
         public async Task<IActionResult> Respond([FromBody] FriendRespondDTO dto)
         {
             var userId = GetUserId();
-            // This maps requestId cleanly!
             await _social.RespondRequestAsync(userId, dto.RequestId, dto.Accept);
             return Ok(new { message = dto.Accept ? "Friend request accepted." : "Friend request declined." });
         }

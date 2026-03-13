@@ -20,4 +20,10 @@ namespace LynqoBackend.Models.DTOs
         public int RequestId { get; set; }     // Maps directly to FriendshipId
         public bool Accept { get; set; }       // True to accept, false to decline
     }
+
+    // ÚJ DTO a név/email alapján történõ kereséshez
+    public class FriendRequestByIdentifierDTO
+    {
+        public string Identifier { get; set; } = "";
+    }
 }
