@@ -77,7 +77,7 @@ namespace Lynqo_Backend.Controllers
                 return Unauthorized(new { error = "Account banned.", reason = activeBan.Reason });
             }
 
-            // 1. Generate Access Token (JWT)
+            // 1. Generate Access Token (JWT) 
             var accessToken = JwtHelper.GenerateJwtToken(
                 user,
                 _config["Jwt:Key"],
