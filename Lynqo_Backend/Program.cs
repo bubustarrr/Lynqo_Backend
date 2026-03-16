@@ -1,5 +1,6 @@
 using Lynqo_Backend.Data;
 using Lynqo_Backend.Models.Services;
+using Lynqo_Backend.Services;
 using LynqoBackend.Models.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddScoped<IEmailService, EmailService>();
 
 // --- Swagger Configuration with JWT Support ---
 builder.Services.AddSwaggerGen(c =>
@@ -89,6 +91,7 @@ builder.Services.AddScoped<SocialService>();
 builder.Services.AddScoped<AiService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<ChatService>();
+
 
 
 
