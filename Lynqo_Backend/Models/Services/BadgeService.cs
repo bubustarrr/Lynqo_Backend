@@ -23,71 +23,99 @@ namespace Lynqo_Backend.Services
 
         public async Task CheckAndAwardBadgesAsync(int userId)
         {
-            // 1. Fetch the User from the DB to get their current streak
+            // 1. Fetch the User from the DB
             var user = await _context.Users.FindAsync(userId);
-            if (user == null)
-            {
-                return; // Safety check: if user doesn't exist, do nothing
-            }
+            if (user == null) return;
 
-            // Get the streak directly from the DB record
-            int currentStreak = user.Streak; // Note: Change "Streak" if your model property is named differently (e.g. CurrentStreak)
+            int currentStreak = user.Streak;
 
-            // 2. Fetch the user's currently earned badges so we don't give them duplicates
+            // 2. Fetch earned badges
             var earnedBadgeIds = await _context.UserBadges
                 .Where(ub => ub.UserId == userId)
                 .Select(ub => ub.BadgeId)
                 .ToListAsync();
 
-            // 3. Check if the user has a Rank of 1 in any Leaderboard
-            bool hasWonWeeklyLeaderboard = await _context.LeaderboardEntries
-                .AnyAsync(le => le.UserId == userId && le.Rank == 1);
+            // 3. Gather data for various badges
 
-            // 4. Fetch Total XP to check for XP badges
+            // Total XP (For Badges 4 & 5)
             var xpRecords = await _context.UserXps
                 .Where(x => x.UserId == userId)
                 .Select(x => x.XpAmount)
-                .ToListAsync(); // Pull the numbers out of the DB first
+                .ToListAsync();
+            int totalXp = xpRecords.Sum();
 
-            int totalXp = xpRecords.Sum(); // Then calculate the sum in C#
+            // Has any completed lesson (For Badge 1)
+            bool hasCompletedFirstLesson = await _context.UserLessons
+                .AnyAsync(ul => ul.UserId == userId);
+
+            // Friend Count (For Badge 6 - assuming accepted friendships count)
+            int friendCount = await _context.Friendships
+                .CountAsync(f => (f.SenderId == userId || f.ReceiverId == userId) && f.Status == "accepted");
+
+            // Has a perfect score (For Badge 7)
+            // Assuming 'BestScore' in UserLessons being 100 means 100% accuracy
+            bool hasPerfectLesson = await _context.UserLessons
+                .AnyAsync(ul => ul.UserId == userId && ul.BestScore == 100);
+
+            // Has won weekly leaderboard (For Badge 8)
+            bool hasWonWeeklyLeaderboard = await _context.LeaderboardEntries
+                .AnyAsync(le => le.UserId == userId && le.Rank == 1);
 
 
-            // 5. EVALUATE BADGES 
-            // Based on your database badges: 2 = 5-Day Streak, 3 = 10-Day Streak, 4 = 500 XP, 5 = 2000 XP, 8 = Champion
+            // 4. EVALUATE BADGES 
 
-            // 5-Day Streak Badge
+            // Badge 1: Welcome! (First lesson)
+            if (hasCompletedFirstLesson && !earnedBadgeIds.Contains(1))
+            {
+                await AwardBadgeAsync(userId, 1);
+            }
+
+            // Badge 2: 5-Day Streak
             if (currentStreak >= 5 && !earnedBadgeIds.Contains(2))
             {
                 await AwardBadgeAsync(userId, 2);
             }
 
-            // 10-Day Streak Badge
+            // Badge 3: 10-Day Streak
             if (currentStreak >= 10 && !earnedBadgeIds.Contains(3))
             {
                 await AwardBadgeAsync(userId, 3);
             }
 
-            // XP Hunter (500 XP)
+            // Badge 4: XP Hunter (500 XP)
             if (totalXp >= 500 && !earnedBadgeIds.Contains(4))
             {
                 await AwardBadgeAsync(userId, 4);
             }
 
-            // XP Master (2000 XP)
+            // Badge 5: XP Master (2000 XP)
             if (totalXp >= 2000 && !earnedBadgeIds.Contains(5))
             {
                 await AwardBadgeAsync(userId, 5);
             }
 
-            // Weekly Champion Badge
+            // Badge 6: Social Butterfly (3 friends)
+            if (friendCount >= 3 && !earnedBadgeIds.Contains(6))
+            {
+                await AwardBadgeAsync(userId, 6);
+            }
+
+            // Badge 7: Perfectionist (100% accuracy)
+            if (hasPerfectLesson && !earnedBadgeIds.Contains(7))
+            {
+                await AwardBadgeAsync(userId, 7);
+            }
+
+            // Badge 8: Weekly Champion
             if (hasWonWeeklyLeaderboard && !earnedBadgeIds.Contains(8))
             {
                 await AwardBadgeAsync(userId, 8);
             }
 
-            // Save all newly awarded badges to the database
+            // 5. Save all newly awarded badges
             await _context.SaveChangesAsync();
         }
+
 
         // Helper method to actually insert the badge
         private async Task AwardBadgeAsync(int userId, int badgeId)

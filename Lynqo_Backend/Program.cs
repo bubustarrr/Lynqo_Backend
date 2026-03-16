@@ -91,6 +91,7 @@ builder.Services.AddScoped<SocialService>();
 builder.Services.AddScoped<AiService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<ChatService>();
+builder.Services.AddScoped<IBadgeService, BadgeService>();
 
 
 
