@@ -93,5 +93,23 @@ namespace LynqoBackend.Controllers
             await _social.RespondRequestAsync(userId, dto.RequestId, dto.Accept);
             return Ok(new { message = dto.Accept ? "Friend request accepted." : "Friend request declined." });
         }
+        // --- ÚJ VÉGPONT: Barát törlése (Unfriend) ---
+        // A frontend a BARÁT USER ID-ját küldi, nem a friendship id-t!
+        [HttpDelete("{friendUserId}")]
+        public async Task<IActionResult> Unfriend(int friendUserId)
+        {
+            var userId = GetUserId();
+
+            try
+            {
+                await _social.RemoveFriendAsync(userId, friendUserId);
+                return Ok(new { message = "Friend removed successfully." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
     }
 }

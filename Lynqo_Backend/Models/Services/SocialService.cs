@@ -103,5 +103,22 @@ namespace LynqoBackend.Models.Services
 
             await _context.SaveChangesAsync();
         }
+        // Add this inside SocialService.cs
+        public async Task RemoveFriendAsync(int requestingUserId, int friendUserId)
+        {
+            // Megkeressük a barátságot, ahol ez a két felhasználó szerepel
+            var friendship = await _context.Friendships.FirstOrDefaultAsync(f =>
+                (f.SenderId == requestingUserId && f.ReceiverId == friendUserId) ||
+                (f.SenderId == friendUserId && f.ReceiverId == requestingUserId));
+
+            if (friendship == null)
+            {
+                throw new Exception("Friendship not found.");
+            }
+
+            _context.Friendships.Remove(friendship);
+            await _context.SaveChangesAsync();
+        }
     }
+
 }
