@@ -1,54 +1,105 @@
 ﻿using Lynqo_Backend.Data;
 using Lynqo_Backend.Models;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Lynqo_Backend.Services
 {
-    public class BadgeService
+    public interface IBadgeService
+    {
+        Task CheckAndAwardBadgesAsync(int userId);
+    }
+
+    public class BadgeService : IBadgeService
     {
         private readonly LynqoDbContext _context;
 
-        public BadgeService(LynqoDbContext context) => _context = context;
-
-        public async Task EvaluateBadgesAsync(int userId)
+        public BadgeService(LynqoDbContext context)
         {
-            // 1. Get the IDs of badges the user already owns
-            var ownedBadgeIds = await _context.UserBadges
+            _context = context;
+        }
+
+        public async Task CheckAndAwardBadgesAsync(int userId)
+        {
+            // 1. Fetch the User from the DB to get their current streak
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null)
+            {
+                return; // Safety check: if user doesn't exist, do nothing
+            }
+
+            // Get the streak directly from the DB record
+            int currentStreak = user.Streak; // Note: Change "Streak" if your model property is named differently (e.g. CurrentStreak)
+
+            // 2. Fetch the user's currently earned badges so we don't give them duplicates
+            var earnedBadgeIds = await _context.UserBadges
                 .Where(ub => ub.UserId == userId)
                 .Select(ub => ub.BadgeId)
                 .ToListAsync();
 
-            var newBadges = new List<UserBadge>();
+            // 3. Check if the user has a Rank of 1 in any Leaderboard
+            bool hasWonWeeklyLeaderboard = await _context.LeaderboardEntries
+                .AnyAsync(le => le.UserId == userId && le.Rank == 1);
 
-            // Helper to prevent adding duplicates in a single run
-            void AwardBadgeIf(int badgeId, bool condition)
+            // 4. Fetch Total XP to check for XP badges
+            var xpRecords = await _context.UserXps
+                .Where(x => x.UserId == userId)
+                .Select(x => x.XpAmount)
+                .ToListAsync(); // Pull the numbers out of the DB first
+
+            int totalXp = xpRecords.Sum(); // Then calculate the sum in C#
+
+
+            // 5. EVALUATE BADGES 
+            // Based on your database badges: 2 = 5-Day Streak, 3 = 10-Day Streak, 4 = 500 XP, 5 = 2000 XP, 8 = Champion
+
+            // 5-Day Streak Badge
+            if (currentStreak >= 5 && !earnedBadgeIds.Contains(2))
             {
-                if (condition && !ownedBadgeIds.Contains(badgeId))
-                {
-                    newBadges.Add(new UserBadge { UserId = userId, BadgeId = badgeId, EarnedAt = DateTime.UtcNow });
-                    ownedBadgeIds.Add(badgeId);
-                }
+                await AwardBadgeAsync(userId, 2);
             }
 
-            // 2. Fetch User Stats
-            var totalXp = await _context.UserXp.Where(x => x.UserId == userId).SumAsync(x => x.XpAmount);
-            var lessonsCompletedCount = await _context.UserLessons.Where(ul => ul.UserId == userId).CountAsync();
-            var friendsCount = await _context.Friendships.Where(f => (f.SenderId == userId || f.ReceiverId == userId) && f.Status == "accepted").CountAsync();
-            var hasPerfectScore = await _context.UserLessons.AnyAsync(ul => ul.UserId == userId && ul.BestScore == 100);
-
-            // 3. Evaluate Conditions (IDs match your SQL dump)
-            AwardBadgeIf(1, lessonsCompletedCount >= 1); // Welcome!
-            AwardBadgeIf(4, totalXp >= 500);             // XP Hunter
-            AwardBadgeIf(5, totalXp >= 2000);            // XP Master
-            AwardBadgeIf(6, friendsCount >= 3);          // Social Butterfly
-            AwardBadgeIf(7, hasPerfectScore);            // Perfectionist
-
-            // 4. Save new badges if earned
-            if (newBadges.Any())
+            // 10-Day Streak Badge
+            if (currentStreak >= 10 && !earnedBadgeIds.Contains(3))
             {
-                _context.UserBadges.AddRange(newBadges);
-                await _context.SaveChangesAsync();
+                await AwardBadgeAsync(userId, 3);
             }
+
+            // XP Hunter (500 XP)
+            if (totalXp >= 500 && !earnedBadgeIds.Contains(4))
+            {
+                await AwardBadgeAsync(userId, 4);
+            }
+
+            // XP Master (2000 XP)
+            if (totalXp >= 2000 && !earnedBadgeIds.Contains(5))
+            {
+                await AwardBadgeAsync(userId, 5);
+            }
+
+            // Weekly Champion Badge
+            if (hasWonWeeklyLeaderboard && !earnedBadgeIds.Contains(8))
+            {
+                await AwardBadgeAsync(userId, 8);
+            }
+
+            // Save all newly awarded badges to the database
+            await _context.SaveChangesAsync();
+        }
+
+        // Helper method to actually insert the badge
+        private async Task AwardBadgeAsync(int userId, int badgeId)
+        {
+            var newBadge = new UserBadge
+            {
+                UserId = userId,
+                BadgeId = badgeId,
+                EarnedAt = DateTime.UtcNow
+            };
+
+            _context.UserBadges.Add(newBadge);
         }
     }
 }

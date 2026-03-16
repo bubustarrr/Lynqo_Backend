@@ -26,10 +26,11 @@ public class BadgesController : ControllerBase
     }
 
     [HttpGet("user/{userId}")]
-    public async Task<IActionResult> GetUserBadges(int userId, [FromServices] BadgeService badgeService)
+    public async Task<IActionResult> GetUserBadges(int userId, [FromServices] IBadgeService badgeService)
     {
         // 1. Evaluate & award missing badges dynamically
-        await badgeService.EvaluateBadgesAsync(userId);
+        await badgeService.CheckAndAwardBadgesAsync(userId);
+
 
         // 2. Fetch ALL badges
         var allBadges = await _context.Badges.ToListAsync();
