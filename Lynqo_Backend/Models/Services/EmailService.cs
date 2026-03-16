@@ -8,6 +8,7 @@ namespace Lynqo_Backend.Services
     public interface IEmailService
     {
         Task SendVerificationEmailAsync(string toEmail, string verificationLink);
+        Task SendPasswordResetEmailAsync(string toEmail, string resetLink);
     }
 
     public class EmailService : IEmailService
@@ -35,13 +36,37 @@ namespace Lynqo_Backend.Services
             var mailMessage = new MailMessage
             {
                 From = new MailAddress(smtpUser, "Lynqo App"),
-                Subject = "Erősítsd meg az email címedet - Lynqo",
-                Body = $"Szia!\n\nKérlek kattints az alábbi linkre a regisztrációd megerősítéséhez:\n{verificationLink}\n\nHa nem te regisztráltál, hagyd figyelmen kívül ezt az üzenetet.",
-                IsBodyHtml = false // Ezt később true-ra állíthatod, ha szép, dizájnos HTML levelet akarsz küldeni
+                Subject = "Verify your email address - Lynqo",
+                Body = $"Hi!\n\nPlease click the link below to verify your email address and complete your registration:\n{verificationLink}\n\nIf you did not register for an account, you can safely ignore this email.",
+                IsBodyHtml = false
             };
 
             mailMessage.To.Add(toEmail);
+            await client.SendMailAsync(mailMessage);
+        }
 
+        public async Task SendPasswordResetEmailAsync(string toEmail, string resetLink)
+        {
+            var smtpHost = _config["Email:SmtpHost"];
+            var smtpPort = int.Parse(_config["Email:SmtpPort"]);
+            var smtpUser = _config["Email:SmtpUser"];
+            var smtpPass = _config["Email:SmtpPass"];
+
+            using var client = new SmtpClient(smtpHost, smtpPort)
+            {
+                Credentials = new NetworkCredential(smtpUser, smtpPass),
+                EnableSsl = true
+            };
+
+            var mailMessage = new MailMessage
+            {
+                From = new MailAddress(smtpUser, "Lynqo App"),
+                Subject = "Password Reset - Lynqo",
+                Body = $"Hi!\n\nWe received a request to reset your password. Click the link below to set a new password:\n{resetLink}\n\nIf you did not request a password reset, please ignore this email.\n\nThis link will expire in 1 hour.",
+                IsBodyHtml = false
+            };
+
+            mailMessage.To.Add(toEmail);
             await client.SendMailAsync(mailMessage);
         }
     }

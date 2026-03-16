@@ -51,6 +51,13 @@ namespace Lynqo_Backend.Models
         [Column("verification_token")]
         public string? VerificationToken { get; set; }
 
+        // --- ÚJ MEZŐK: ELFELEJTETT JELSZÓ ---
+        [Column("reset_token")]
+        public string? ResetToken { get; set; }
+
+        [Column("reset_token_expiry")]
+        public DateTime? ResetTokenExpiry { get; set; }
+
         // --- ÚJ MEZŐK A STREAK-HEZ ---
         [Column("streak")]
         public int Streak { get; set; } = 0;
