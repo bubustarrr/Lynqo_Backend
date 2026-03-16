@@ -127,73 +127,94 @@ namespace LynqoBackend.Controllers
 
         private async Task ProcessWeeklyResetAsync(DateTime currentWeekStart)
         {
+            // 1. Define the timeframe for LAST week
             var lastWeekStart = currentWeekStart.AddDays(-7);
-            var lastWeekEnd = currentWeekStart.AddTicks(-1); // Sunday 11:59:59 PM
+            var lastWeekEnd = currentWeekStart.AddDays(-1); // Sunday
 
-            // Have we already saved last week's leaderboards?
-            bool alreadyProcessed = await _context.Leaderboards.AnyAsync(l => l.StartDate == lastWeekStart);
+            // 2. Check the logs: Did we already process last week?
+            // If a log exists for last week, we stop here.
+            bool alreadyProcessed = await _context.Leaderboards
+                .AnyAsync(l => l.StartDate == lastWeekStart);
+
             if (alreadyProcessed) return;
 
-            // Process every league tier
-            foreach (var league in LeagueOrder)
+            // 3. Define your leagues in order from lowest to highest
+            var leagues = new List<string> { "Bronze", "Copper", "Silver", "Gold", "Sapphire", "Ruby", "Emerald", "Diamond" };
+
+            foreach (var league in leagues)
             {
-                var usersInLeague = await _context.Users.Where(u => u.League == league).ToListAsync();
+                // Get all users in this league
+                var usersInLeague = await _context.Users
+                    .Where(u => u.League == league)
+                    .ToListAsync();
+
                 if (!usersInLeague.Any()) continue;
 
                 var userIds = usersInLeague.Select(u => u.Id).ToList();
-                var lastWeekXp = await _context.UserXps
+
+                // Get their XP strictly from LAST week
+                var xpStats = await _context.UserXps
                     .Where(x => x.CreatedAt >= lastWeekStart && x.CreatedAt <= lastWeekEnd && userIds.Contains(x.UserId))
                     .GroupBy(x => x.UserId)
-                    .Select(g => new { UserId = g.Key, Xp = g.Sum(x => x.XpAmount) })
-                    .ToDictionaryAsync(x => x.UserId, x => x.Xp);
+                    .Select(g => new { UserId = g.Key, TotalXp = g.Sum(x => x.XpAmount) })
+                    .ToDictionaryAsync(x => x.UserId, x => x.TotalXp);
 
-                // Sort players from last week
+                // Rank them
                 var rankedUsers = usersInLeague
-                    .Select(u => new { User = u, Xp = lastWeekXp.ContainsKey(u.Id) ? lastWeekXp[u.Id] : 0 })
+                    .Select(u => new
+                    {
+                        User = u,
+                        Xp = xpStats.ContainsKey(u.Id) ? xpStats[u.Id] : 0
+                    })
                     .OrderByDescending(x => x.Xp)
                     .ToList();
 
-                // Save historical Leaderboard
-                var board = new Leaderboard { LeagueName = league, StartDate = lastWeekStart, EndDate = lastWeekEnd };
-                _context.Leaderboards.Add(board);
-                await _context.SaveChangesAsync(); // Get the new board.Id
-
-                int rank = 1;
-                int totalPlayers = rankedUsers.Count;
-                int currentLeagueIndex = Array.IndexOf(LeagueOrder, league);
-
-                foreach (var ru in rankedUsers)
+                // 4. CREATE THE LEADERBOARD LOG
+                var leaderboardLog = new Leaderboard
                 {
-                    // 1. Permanently Save their historical finish
+                    LeagueName = league,
+                    StartDate = lastWeekStart,
+                    EndDate = lastWeekEnd
+                };
+                _context.Leaderboards.Add(leaderboardLog);
+                await _context.SaveChangesAsync(); // Save to generate the Leaderboard ID
+
+                // 5. LOG THE ENTRIES & PROMOTE/DEMOTE
+                int totalUsers = rankedUsers.Count;
+                int promotionCount = (int)Math.Ceiling(totalUsers * 0.2); // Top 20%
+                int demotionCount = (int)Math.Ceiling(totalUsers * 0.2); // Bottom 20%
+
+                for (int i = 0; i < totalUsers; i++)
+                {
+                    var entry = rankedUsers[i];
+                    int rank = i + 1;
+
+                    // Save the user's final result to the log table
                     _context.LeaderboardEntries.Add(new LeaderboardEntry
                     {
-                        LeaderboardId = board.Id,
-                        UserId = ru.User.Id,
-                        Xp = ru.Xp,
+                        LeaderboardId = leaderboardLog.Id,
+                        UserId = entry.User.Id,
+                        Xp = entry.Xp,
                         Rank = rank
                     });
 
-                    // 2. PROMOTION / DEMOTION LOGIC
-                    if (rank <= 5)
+                    // Update their actual league for the new week
+                    int currentLeagueIndex = leagues.IndexOf(league);
+                    if (rank <= promotionCount && currentLeagueIndex < leagues.Count - 1)
                     {
-                        // Promote to next league (if not currently in Diamond)
-                        if (currentLeagueIndex < LeagueOrder.Length - 1)
-                            ru.User.League = LeagueOrder[currentLeagueIndex + 1];
+                        entry.User.League = leagues[currentLeagueIndex + 1]; // Promote
                     }
-                    else if (rank >= Math.Max(6, totalPlayers - 4))
+                    else if (rank > totalUsers - demotionCount && currentLeagueIndex > 0)
                     {
-                        // Demote to lower league (if not currently in Bronze)
-                        if (currentLeagueIndex > 0)
-                            ru.User.League = LeagueOrder[currentLeagueIndex - 1];
+                        entry.User.League = leagues[currentLeagueIndex - 1]; // Demote
                     }
-
-                    rank++;
                 }
             }
 
-            // Save all new leagues and history entries to the database!
+            // Save all log entries and user promotions to the database at once
             await _context.SaveChangesAsync();
         }
+
 
         private string GetZone(int rank, int totalPlayers, string currentLeague)
         {

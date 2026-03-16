@@ -28,10 +28,6 @@ public class LynqoDbContext : DbContext
     public DbSet<ChatMessage> ChatMessages { get; set; }
     public DbSet<Report> Reports { get; set; }
     public DbSet<Notification> Notifications { get; set; }
-    public DbSet<Analytics> Analytics { get; set; }
-    public DbSet<PracticeSession> PracticeSessions { get; set; }
-    public DbSet<AiSession> AiSessions { get; set; }
-    public DbSet<AiMessage> AiMessages { get; set; }
     public DbSet<BannedUser> BannedUsers { get; set; }
     public DbSet<AdminLog> AdminLogs { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
@@ -59,10 +55,6 @@ public class LynqoDbContext : DbContext
         modelBuilder.Entity<ChatMessage>().ToTable("chat_messages");
         modelBuilder.Entity<Report>().ToTable("reports");
         modelBuilder.Entity<Notification>().ToTable("notifications");
-        modelBuilder.Entity<Analytics>().ToTable("analytics");
-        modelBuilder.Entity<PracticeSession>().ToTable("practice_sessions");
-        modelBuilder.Entity<AiSession>().ToTable("ai_sessions");
-        modelBuilder.Entity<AiMessage>().ToTable("ai_messages");
         modelBuilder.Entity<BannedUser>().ToTable("banned_users");
         modelBuilder.Entity<AdminLog>().ToTable("admin_logs");
         modelBuilder.Entity<AuditLog>().ToTable("audit_logs");
@@ -212,41 +204,7 @@ public class LynqoDbContext : DbContext
         modelBuilder.Entity<Subscription>()
             .Property(s => s.TransactionId).HasColumnName("transaction_id");
 
-        // --- 4. ANALYTICS & PRACTICE Mappings ---
-        modelBuilder.Entity<Analytics>()
-            .Property(a => a.UserId).HasColumnName("user_id");
-        modelBuilder.Entity<Analytics>()
-            .Property(a => a.LessonId).HasColumnName("lesson_id");
-        modelBuilder.Entity<Analytics>()
-            .Property(a => a.TimeSpentSeconds).HasColumnName("time_spent_seconds");
-        modelBuilder.Entity<Analytics>()
-            .Property(a => a.CompletedAt).HasColumnName("completed_at");
-
-        modelBuilder.Entity<PracticeSession>()
-            .Property(p => p.UserId).HasColumnName("user_id");
-        modelBuilder.Entity<PracticeSession>()
-            .Property(p => p.XpEarned).HasColumnName("xp_earned");
-        modelBuilder.Entity<PracticeSession>()
-            .Property(p => p.DurationSeconds).HasColumnName("duration_seconds");
-        modelBuilder.Entity<PracticeSession>()
-            .Property(p => p.CreatedAt).HasColumnName("created_at");
-
-        // --- 5. AI SESSIONS Mappings ---
-        modelBuilder.Entity<AiSession>()
-            .Property(a => a.UserId).HasColumnName("user_id");
-        modelBuilder.Entity<AiSession>()
-            .Property(a => a.LessonId).HasColumnName("lesson_id");
-        modelBuilder.Entity<AiSession>()
-            .Property(a => a.StartTime).HasColumnName("start_time");
-        modelBuilder.Entity<AiSession>()
-            .Property(a => a.EndTime).HasColumnName("end_time");
-        modelBuilder.Entity<AiSession>()
-            .Property(a => a.AiFeedback).HasColumnName("ai_feedback");
-        modelBuilder.Entity<AiSession>()
-            .Property(a => a.AiScore).HasColumnName("ai_score");
-
-        modelBuilder.Entity<AiMessage>()
-            .Property(m => m.SessionId).HasColumnName("session_id");
+      
 
         // --- 6. ADMIN & LOGS Mappings ---
         modelBuilder.Entity<AdminLog>()
