@@ -65,6 +65,8 @@ namespace Lynqo_Backend.Models
         [Column("last_lesson_date")]
         public DateTime? LastLessonDate { get; set; }
 
+        [Column("league")]
+        public string League { get; set; } = "Bronze";
         // Navigation properties (needed by DbContext)
         public ICollection<UserXp> XpHistory { get; set; } = new List<UserXp>();
         public ICollection<UserLesson> UserLessons { get; set; } = new List<UserLesson>();
