@@ -92,11 +92,6 @@ public class LynqoDbContext : DbContext
             .HasForeignKey(le => le.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        modelBuilder.Entity<UserBadge>()
-            .HasOne(ub => ub.User)
-            .WithMany()
-            .HasForeignKey(ub => ub.UserId)
-            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<UserBadge>()
             .HasOne(ub => ub.Badge)

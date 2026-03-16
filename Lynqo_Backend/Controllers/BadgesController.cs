@@ -1,6 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Lynqo_Backend.Data;
+﻿using Lynqo_Backend.Data;
 using Lynqo_Backend.Models.DTOs;
+using Lynqo_Backend.Services;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 [ApiController]
@@ -25,19 +26,31 @@ public class BadgesController : ControllerBase
     }
 
     [HttpGet("user/{userId}")]
-    public async Task<IActionResult> GetUserBadges(int userId)
+    public async Task<IActionResult> GetUserBadges(int userId, [FromServices] BadgeService badgeService)
     {
-        var badges = await _context.UserBadges
+        // 1. Evaluate & award missing badges dynamically
+        await badgeService.EvaluateBadgesAsync(userId);
+
+        // 2. Fetch ALL badges
+        var allBadges = await _context.Badges.ToListAsync();
+
+        // 3. Fetch IDs of badges the user owns
+        var userBadgeIds = await _context.UserBadges
             .Where(ub => ub.UserId == userId)
-            .Include(ub => ub.Badge)
-            .Select(ub => new BadgeDTO
-            {
-                Id = ub.Badge.Id,
-                Name = ub.Badge.Name,
-                Description = ub.Badge.Description,
-                IconUrl = ub.Badge.IconUrl
-            })
+            .Select(ub => ub.BadgeId)
             .ToListAsync();
-        return Ok(badges);
+
+        // 4. Return combined result
+        var result = allBadges.Select(b => new
+        {
+            Id = b.Id,
+            Name = b.Name,
+            Description = b.Description,
+            IconUrl = b.IconUrl,
+            IsOwned = userBadgeIds.Contains(b.Id)
+        });
+
+        return Ok(result);
     }
+
 }

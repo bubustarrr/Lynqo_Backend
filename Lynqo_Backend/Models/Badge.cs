@@ -16,10 +16,10 @@ namespace Lynqo_Backend.Models
         [Column("description")]
         public string Description { get; set; }
 
-        [Column("icon_url")]
+        [Column("icon_url")] 
         public string IconUrl { get; set; }
 
         [Column("type")]
-        public string Type { get; set; } // "milestone" or "weekly"
+        public string Type { get; set; }
     }
 }

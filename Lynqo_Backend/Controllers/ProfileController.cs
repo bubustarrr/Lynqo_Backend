@@ -281,6 +281,7 @@ namespace Lynqo_Backend.Controllers
 
             return new
             {
+                id = user.Id,
                 Username = user.Username,
                 DisplayName = string.IsNullOrEmpty(user.DisplayName) ? user.Username : user.DisplayName,
                 Email = user.Email,
