@@ -8,6 +8,9 @@ namespace LynqoBackend.Models.DTOs
         public string DisplayName { get; set; } = "";
         public string Status { get; set; } = ""; // "pending" | "accepted" | "declined"
         public bool IsSender { get; set; }
+
+        // --- ÚJ MEZÕ: PROFILKÉP ÁTADÁSA ---
+        public string? AvatarUrl { get; set; }
     }
 
     public class FriendRequestDTO
@@ -21,7 +24,6 @@ namespace LynqoBackend.Models.DTOs
         public bool Accept { get; set; }       // True to accept, false to decline
     }
 
-    // ÚJ DTO a név/email alapján történõ kereséshez
     public class FriendRequestByIdentifierDTO
     {
         public string Identifier { get; set; } = "";
