@@ -18,7 +18,7 @@ namespace LynqoBackend.Models.Services
         {
             var friendships = await _context.Friendships
                 .Where(f => f.Status == "accepted" &&
-                           (f.SenderId == userId || f.ReceiverId == userId))
+                            (f.SenderId == userId || f.ReceiverId == userId))
                 .Include(f => f.Sender)
                 .Include(f => f.Receiver)
                 .ToListAsync();
@@ -33,7 +33,9 @@ namespace LynqoBackend.Models.Services
                     Username = other.Username,
                     DisplayName = other.DisplayName,
                     Status = f.Status,
-                    IsSender = f.SenderId == userId
+                    IsSender = f.SenderId == userId,
+                    // --- ÚJ SOR: Profilkép átadása a DTO-nak ---
+                    AvatarUrl = other.ProfilePicUrl
                 };
             }).ToList();
         }
@@ -53,7 +55,9 @@ namespace LynqoBackend.Models.Services
                 Username = f.Sender.Username,
                 DisplayName = f.Sender.DisplayName,
                 Status = f.Status,
-                IsSender = false
+                IsSender = false,
+                // --- ÚJ SOR: Profilkép átadása a DTO-nak (Jelöléseknél is látszódjon) ---
+                AvatarUrl = f.Sender.ProfilePicUrl
             }).ToList();
         }
 
@@ -103,6 +107,7 @@ namespace LynqoBackend.Models.Services
 
             await _context.SaveChangesAsync();
         }
+
         // Add this inside SocialService.cs
         public async Task RemoveFriendAsync(int requestingUserId, int friendUserId)
         {
@@ -120,5 +125,4 @@ namespace LynqoBackend.Models.Services
             await _context.SaveChangesAsync();
         }
     }
-
 }
