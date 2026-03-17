@@ -14,9 +14,7 @@ namespace LynqoBackend.Controllers
     public class FriendsController : ControllerBase
     {
         private readonly SocialService _social;
-        private readonly LynqoDbContext _context; // ÚJ: DB kapcsolat a kereséshez
-
-        // ÚJ: A konstruktor most már a LynqoDbContext-et is elkéri
+        private readonly LynqoDbContext _context;
         public FriendsController(SocialService social, LynqoDbContext context)
         {
             _social = social;
@@ -56,13 +54,12 @@ namespace LynqoBackend.Controllers
             return Ok(new { message = "Friend request sent." });
         }
 
-        // --- ÚJ VÉGPONT: Keresés és jelölés név vagy email alapján ---
         [HttpPost("request-by-identifier")]
         public async Task<IActionResult> SendRequestByIdentifier([FromBody] FriendRequestByIdentifierDTO dto)
         {
             var userId = GetUserId();
 
-            // 1. Keresés az adatbázisban a Név vagy Email alapján
+            // Keresés az adatbázisban a Név vagy Email alapján
             var targetUser = await _context.Users.FirstOrDefaultAsync(u =>
                 u.Username == dto.Identifier ||
                 u.Email == dto.Identifier);
@@ -73,7 +70,7 @@ namespace LynqoBackend.Controllers
             if (targetUser.Id == userId)
                 return BadRequest(new { message = "Magadat nem veheted fel barátnak!" });
 
-            // 2. Mentés a SocialService-en keresztül
+            // Mentés a SocialService-en keresztül
             try
             {
                 await _social.SendRequestAsync(userId, targetUser.Id);
@@ -93,8 +90,7 @@ namespace LynqoBackend.Controllers
             await _social.RespondRequestAsync(userId, dto.RequestId, dto.Accept);
             return Ok(new { message = dto.Accept ? "Friend request accepted." : "Friend request declined." });
         }
-        // --- ÚJ VÉGPONT: Barát törlése (Unfriend) ---
-        // A frontend a BARÁT USER ID-ját küldi, nem a friendship id-t!
+
         [HttpDelete("{friendUserId}")]
         public async Task<IActionResult> Unfriend(int friendUserId)
         {

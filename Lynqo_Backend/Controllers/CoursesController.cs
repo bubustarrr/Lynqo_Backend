@@ -17,7 +17,6 @@ namespace Lynqo_Backend.Controllers
         }
 
         // GET: api/Courses
-        // Optional: Filter by source language ID (e.g., ?sourceId=1)
         [HttpGet]
         public async Task<IActionResult> GetCourses([FromQuery] int? sourceId)
         {

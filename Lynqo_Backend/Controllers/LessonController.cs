@@ -164,14 +164,11 @@ namespace Lynqo_Backend.Controllers
 
             int userId = int.Parse(userIdClaim.Value);
 
-            // 1. Update Hearts on User
+            // Update Hearts on User
             var user = await _context.Users.FindAsync(userId);
             if (user == null) return NotFound("User not found");
             user.Hearts = dto.HeartsRemaining;
 
-            // ========================================================
-            // ÚJ: DAILY STREAK (Napi Sorozat) logika
-            // ========================================================
             var today = DateTime.UtcNow.Date;
             var lastLessonDate = user.LastLessonDate?.Date;
 
@@ -189,9 +186,8 @@ namespace Lynqo_Backend.Controllers
 
             // Mindenképpen frissítjük az utolsó lecke dátumát a mai napra/mostani pillanatra
             user.LastLessonDate = DateTime.UtcNow;
-            // ========================================================
 
-            // 2. Insert XP History Record 
+            // Insert XP History Record 
             var xpEntry = new UserXp
             {
                 UserId = userId,
@@ -201,7 +197,7 @@ namespace Lynqo_Backend.Controllers
             };
             _context.UserXps.Add(xpEntry);
 
-            // 3. Update Lesson Progress
+            // Update Lesson Progress
             var existingProgress = await _context.UserLessons
                 .FirstOrDefaultAsync(ul => ul.UserId == userId && ul.LessonId == id);
 
@@ -229,11 +225,11 @@ namespace Lynqo_Backend.Controllers
 
             await _context.SaveChangesAsync();
 
-            // 4. TRIGGERS FOR DAILY QUESTS
+            // TRIGGERS FOR DAILY QUESTS
             await _gamificationService.UpdateQuestProgressAsync(userId, 1, 1);
             await _gamificationService.UpdateQuestProgressAsync(userId, 2, 1);
 
-            // 5. Calculate New Total XP to return to frontend
+            // Calculate New Total XP to return to frontend
             int currentTotalXp = await _context.UserXps
                 .Where(x => x.UserId == userId)
                 .SumAsync(x => x.XpAmount);
@@ -244,11 +240,11 @@ namespace Lynqo_Backend.Controllers
                 XpAwarded = dto.XpEarned,
                 Hearts = user.Hearts,
                 TotalXp = currentTotalXp,
-                Streak = user.Streak // Visszaküldjük a frontednek az új streak-et is!
+                Streak = user.Streak
             });
         }
 
-        // NEW ENDPOINT: Save hearts if a user dies or quits early
+        // Save hearts if a user dies or quits early
         [HttpPost("sync-hearts")]
         [Authorize]
         public async Task<IActionResult> SyncHearts([FromBody] SyncHeartsDto dto)
