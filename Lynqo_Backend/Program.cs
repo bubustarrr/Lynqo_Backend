@@ -58,7 +58,6 @@ builder.Services.AddDbContext<LynqoDbContext>(options =>
 );
 
 // --- JWT Authentication Configuration ---
-// Make sure "Jwt:Key" exists in your appsettings.json and is >32 chars long
 var jwtKey = builder.Configuration["Jwt:Key"];
 var key = Encoding.UTF8.GetBytes(jwtKey);
 
@@ -92,8 +91,10 @@ builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<ChatService>();
 builder.Services.AddScoped<IBadgeService, BadgeService>();
 
-
-
+// ==========================================================
+// --- ÚJ SOR: NAPI ÉRTESÍTÕ SZOLGÁLTATÁS REGISZTRÁLÁSA ---
+// ==========================================================
+builder.Services.AddHostedService<Lynqo_Backend.Services.DailyNotificationService>();
 
 var app = builder.Build();
 

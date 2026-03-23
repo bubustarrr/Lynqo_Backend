@@ -25,6 +25,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="EmailTemplates\" />
+    <Folder Include="wwwroot\media\images\email\" />
     <Folder Include="wwwroot\media\images\profile_pictures\" />
   </ItemGroup>
 </Project>
