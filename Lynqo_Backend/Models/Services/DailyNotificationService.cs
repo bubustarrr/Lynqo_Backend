@@ -39,10 +39,8 @@ namespace Lynqo_Backend.Services
 
                 // ---------------------------------------------------------------------------------
                 // TESZTELÉSHEZ: 
-                // Vedd ki a kommentet az alábbi sorból, ha azonnal le akarod tesztelni a kiküldést,
-                // és nem akarsz délig várni! (10 másodpercet fog várni indulás után)
                 //
-                 delay = TimeSpan.FromSeconds(20); 
+                delay = TimeSpan.FromSeconds(20); 
                 // ---------------------------------------------------------------------------------
 
                 Console.WriteLine($"\n[Napi Értesítő] A következő e-mailek küldése ekkor lesz: {nextNoon}");
