@@ -31,16 +31,13 @@ namespace Lynqo_Backend.Controllers
             if (user == null)
                 return NotFound();
 
-            // Optional: keep this only if HeartService exists in your project
             HeartService.ApplyHeartRefill(user);
             await _context.SaveChangesAsync();
 
-            // Global lifetime XP from userxp table
             int globalXp = await _context.UserXps
                 .Where(x => x.UserId == userId)
                 .SumAsync(x => (int?)x.XpAmount) ?? 0;
 
-            // Course XP from userlessons + lessons
             int currentCourseXp = globalXp;
             if (courseId.HasValue)
             {

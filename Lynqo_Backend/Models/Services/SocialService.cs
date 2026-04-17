@@ -34,7 +34,6 @@ namespace LynqoBackend.Models.Services
                     DisplayName = other.DisplayName,
                     Status = f.Status,
                     IsSender = f.SenderId == userId,
-                    // --- ÚJ SOR: Profilkép átadása a DTO-nak ---
                     AvatarUrl = other.ProfilePicUrl
                 };
             }).ToList();
@@ -42,7 +41,6 @@ namespace LynqoBackend.Models.Services
 
         public async Task<List<FriendDTO>> GetRequestsAsync(int userId)
         {
-            // ONLY get requests where WE are the receiver (people waiting for us to respond)
             var requests = await _context.Friendships
                 .Where(f => f.Status == "pending" && f.ReceiverId == userId)
                 .Include(f => f.Sender)
@@ -56,7 +54,6 @@ namespace LynqoBackend.Models.Services
                 DisplayName = f.Sender.DisplayName,
                 Status = f.Status,
                 IsSender = false,
-                // --- ÚJ SOR: Profilkép átadása a DTO-nak (Jelöléseknél is látszódjon) ---
                 AvatarUrl = f.Sender.ProfilePicUrl
             }).ToList();
         }
@@ -87,11 +84,9 @@ namespace LynqoBackend.Models.Services
 
         public async Task RespondRequestAsync(int userId, int requestId, bool accept)
         {
-            // Find the exact Friendship DB row
             var friendship = await _context.Friendships.FindAsync(requestId)
                              ?? throw new InvalidOperationException("Request not found.");
 
-            // Ensure I am the one receiving this request
             if (friendship.ReceiverId != userId)
                 throw new InvalidOperationException("Not allowed to respond to this request.");
 
@@ -101,17 +96,14 @@ namespace LynqoBackend.Models.Services
             }
             else
             {
-                // If declined, usually we just delete the request entirely so they can try again later
                 _context.Friendships.Remove(friendship);
             }
 
             await _context.SaveChangesAsync();
         }
 
-        // Add this inside SocialService.cs
         public async Task RemoveFriendAsync(int requestingUserId, int friendUserId)
         {
-            // Megkeressük a barátságot, ahol ez a két felhasználó szerepel
             var friendship = await _context.Friendships.FirstOrDefaultAsync(f =>
                 (f.SenderId == requestingUserId && f.ReceiverId == friendUserId) ||
                 (f.SenderId == friendUserId && f.ReceiverId == requestingUserId));

@@ -5,7 +5,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Lynqo_Backend.Data;
 using LynqoBackend.Models.Services;
-using Lynqo_Backend.Models; // Vagy LynqoBackend.Models, attól függően, hol van a Friendship.cs
+using Lynqo_Backend.Models;
 
 namespace Lynqo_Backend.Tests
 {
@@ -14,7 +14,6 @@ namespace Lynqo_Backend.Tests
         [Fact]
         public async Task SendRequestAsync_WhenSenderAndTargetAreSame_ShouldThrowException()
         {
-            // Arrange
             var options = new DbContextOptionsBuilder<LynqoDbContext>()
                 .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
                 .Options;
@@ -24,10 +23,8 @@ namespace Lynqo_Backend.Tests
 
             int userId = 5;
 
-            // Act
             Func<Task> act = async () => await socialService.SendRequestAsync(userId, userId);
 
-            // Assert
             await act.Should().ThrowAsync<InvalidOperationException>()
                      .WithMessage("Cannot add yourself.");
         }
@@ -35,7 +32,6 @@ namespace Lynqo_Backend.Tests
         [Fact]
         public async Task SendRequestAsync_WhenValid_ShouldCreatePendingFriendship()
         {
-            // Arrange
             var options = new DbContextOptionsBuilder<LynqoDbContext>()
                 .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
                 .Options;
@@ -46,10 +42,8 @@ namespace Lynqo_Backend.Tests
             int senderId = 1;
             int targetId = 2;
 
-            // Act
             await socialService.SendRequestAsync(senderId, targetId);
 
-            // Assert
             var request = await context.Friendships.FirstOrDefaultAsync();
             request.Should().NotBeNull();
             request!.SenderId.Should().Be(senderId);
@@ -60,14 +54,12 @@ namespace Lynqo_Backend.Tests
         [Fact]
         public async Task RespondRequestAsync_WhenAccepted_ShouldChangeStatusToAccepted()
         {
-            // Arrange
             var options = new DbContextOptionsBuilder<LynqoDbContext>()
                 .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
                 .Options;
 
             using var context = new LynqoDbContext(options);
 
-            // Létrehozunk egy pending kérelmet
             var pendingRequest = new Friendship
             {
                 Id = 10,
@@ -80,10 +72,8 @@ namespace Lynqo_Backend.Tests
 
             var socialService = new SocialService(context);
 
-            // Act: A 2-es user elfogadja a 10-es azonosítójú kérelmet
             await socialService.RespondRequestAsync(userId: 2, requestId: 10, accept: true);
 
-            // Assert
             var updatedRequest = await context.Friendships.FindAsync(10);
             updatedRequest.Should().NotBeNull();
             updatedRequest!.Status.Should().Be("accepted");
