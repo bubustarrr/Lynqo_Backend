@@ -24,35 +24,30 @@ namespace Lynqo_Backend.Controllers
             if (uploadDto.File == null || uploadDto.File.Length == 0)
                 return BadRequest("No file uploaded.");
 
-            // 1. Create unique filename
             var uniqueFileName = $"{Guid.NewGuid()}_{uploadDto.File.FileName}";
 
-            // 2. Determine folder based on type (audio/image/video)
-            // e.g., wwwroot/media/audio
-            var folderName = Path.Combine("media", uploadDto.FileType);
-            var uploadPath = Path.Combine(_environment.WebRootPath, folderName);
+            // Include language subfolder if provided
+            var folderName = string.IsNullOrEmpty(uploadDto.Language)
+                ? Path.Combine("media", uploadDto.FileType)
+                : Path.Combine("media", uploadDto.FileType, uploadDto.Language);  // ← e.g. media/audio/french
 
+            var uploadPath = Path.Combine(_environment.WebRootPath, folderName);
             if (!Directory.Exists(uploadPath))
                 Directory.CreateDirectory(uploadPath);
 
             var fullPath = Path.Combine(uploadPath, uniqueFileName);
-
-            // 3. Save file to disk
             using (var stream = new FileStream(fullPath, FileMode.Create))
-            {
                 await uploadDto.File.CopyToAsync(stream);
-            }
 
-            // 4. Save metadata to Database
-            var relativePath = $"/{folderName.Replace("\\", "/")}/{uniqueFileName}"; // For URL usage
+            var relativePath = $"/{folderName.Replace("\\", "/")}/{uniqueFileName}";
 
             var mediaFile = new MediaFile
             {
                 FileUrl = relativePath,
                 FileType = uploadDto.FileType,
+                Language = uploadDto.Language,
                 UploadedAt = DateTime.UtcNow
             };
-
 
             _context.MediaFiles.Add(mediaFile);
             await _context.SaveChangesAsync();
@@ -66,38 +61,38 @@ namespace Lynqo_Backend.Controllers
             var files = await _context.MediaFiles.ToListAsync();
             return Ok(files);
         }
-        [HttpGet("audio/french/{number:int}")]
-        public IActionResult GetFrenchNumberDirect(int number)
+        [HttpGet("audio/{language}/{fileName}")]
+        public IActionResult GetAudioFile(string language, string fileName)
         {
             try
             {
-                var filename = GetFrenchNumberFilename(number);
-
-                // Safe way to get wwwroot path
                 var rootPath = _environment.WebRootPath;
                 if (string.IsNullOrEmpty(rootPath))
-                {
                     rootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-                }
 
-                var filePath = Path.Combine(rootPath, "media", "audio", "french", filename);
+                // Sanitize inputs to prevent path traversal attacks
+                language = Path.GetFileName(language);
+                fileName = Path.GetFileName(fileName);
 
-                // DEBUG LOGGING
-                Console.WriteLine($"[AUDIO DEBUG] Request for number: {number}");
-                Console.WriteLine($"[AUDIO DEBUG] Looking at path: {filePath}");
-                Console.WriteLine($"[AUDIO DEBUG] File Exists: {System.IO.File.Exists(filePath)}");
+                var filePath = Path.Combine(rootPath, "media", "audio", language, fileName);
+
+                Console.WriteLine($"[AUDIO] Requested: {language}/{fileName}");
+                Console.WriteLine($"[AUDIO] Full path: {filePath}");
+                Console.WriteLine($"[AUDIO] Exists: {System.IO.File.Exists(filePath)}");
 
                 if (!System.IO.File.Exists(filePath))
+                    return NotFound($"Audio not found: {language}/{fileName}");
+
+                var ext = Path.GetExtension(filePath).ToLower();
+                var contentType = ext switch
                 {
-                    return NotFound($"Audio file missing on server at: {filePath}");
-                }
+                    ".mp3" => "audio/mpeg",
+                    ".ogg" => "audio/ogg",
+                    ".wav" => "audio/wav",
+                    _ => "application/octet-stream"
+                };
 
-                // Add CORS headers so React can play it
-                Response.Headers.Add("Access-Control-Allow-Origin", "*");
-                Response.Headers.Add("Access-Control-Allow-Methods", "GET");
-
-                // Return the file
-                return PhysicalFile(filePath, "audio/mpeg");
+                return PhysicalFile(filePath, contentType, enableRangeProcessing: true);
             }
             catch (Exception ex)
             {

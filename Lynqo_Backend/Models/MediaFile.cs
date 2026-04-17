@@ -10,13 +10,15 @@ namespace Lynqo_Backend.Models
         [Column("id")]
         public int Id { get; set; }
 
-        [Column("file_url")] // Matches your DB column
+        [Column("file_url")]
         public string FileUrl { get; set; }
 
         [Column("file_type")]
         public string FileType { get; set; }
 
-        // Optional: If you want to use these, keep them. If not, they can stay null.
+        [Column("language")]
+        public string? Language { get; set; }
+
         [Column("uploader_id")]
         public int? UploaderId { get; set; }
 

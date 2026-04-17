@@ -35,6 +35,9 @@ namespace Lynqo_Backend.Models
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+        [Column("language")]
+        public string? Language { get; set; }
+
         // Navigation Property: Useful if you want to include the content automatically
         // e.g. _context.Lessons.Include(l => l.Contents)
         // You'll need a LessonContent model for this to work perfectly.

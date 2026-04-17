@@ -107,6 +107,22 @@ namespace Lynqo_Backend.Controllers
 
             var contents = await _context.LessonContents
                 .Where(lc => lc.LessonId == id)
+                .Select(lc => new {
+                    lc.Id,
+                    lc.LessonId,
+                    lc.ContentType,
+                    lc.Question,
+                    lc.Answer,
+                    lc.Options,
+                    lc.MediaId,
+                    // This resolves the integer MediaId into the actual file path
+                    MediaUrl = lc.MediaId != null
+                        ? _context.MediaFiles
+                            .Where(m => m.Id == lc.MediaId)
+                            .Select(m => m.FileUrl)
+                            .FirstOrDefault()
+                        : null
+                })
                 .ToListAsync();
 
             var cleanedContents = contents.Select(c => new
@@ -115,6 +131,7 @@ namespace Lynqo_Backend.Controllers
                 c.ContentType,
                 c.Question,
                 c.Answer,
+                c.MediaUrl,
                 c.MediaId,
                 Options = string.IsNullOrEmpty(c.Options)
                     ? null
@@ -126,7 +143,8 @@ namespace Lynqo_Backend.Controllers
                 Lesson = lesson,
                 Contents = cleanedContents,
                 Hearts = user.Hearts,
-                IsPremium = user.IsPremium
+                IsPremium = user.IsPremium,
+                Language = lesson.Language
             });
         }
 

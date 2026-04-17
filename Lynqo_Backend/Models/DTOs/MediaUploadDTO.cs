@@ -9,6 +9,7 @@ namespace Lynqo_Backend.Models
         public IFormFile File { get; set; }
 
         [Required]
-        public string FileType { get; set; } = "image"; // "image", "audio", "video"
+        public string FileType { get; set; } = "image";
+        public string? Language { get; set; }
     }
 }
